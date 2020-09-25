@@ -36,7 +36,7 @@ func NewTemplateComponent(template string) Component {
 
 func (comp *templateComponent) Setup(ctx *Context, bldr *ctrl.Builder) error {
 	// Render with a fake, blank object just to find the object type.
-	obj, err := comp.renderTemplate(ctx, false)
+	obj, err := comp.renderTemplate(ctx, true)
 	if err != nil {
 		return errors.Wrap(err, "error rendering setup template")
 	}

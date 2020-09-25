@@ -76,6 +76,11 @@ func (r *Reconciler) Component(name string, comp Component) *Reconciler {
 	return r
 }
 
+func (r *Reconciler) TemplateComponent(template string) *Reconciler {
+	name := template[strings.LastIndex(template, ".")+1:]
+	return r.Component(name, NewTemplateComponent(template))
+}
+
 func (r *Reconciler) Templates(t http.FileSystem) *Reconciler {
 	r.templates = t
 	return r
