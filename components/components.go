@@ -28,6 +28,7 @@ type Component interface {
 }
 
 type Result struct {
-	Requeue      bool
-	RequeueAfter time.Duration
+	Requeue       bool
+	RequeueAfter  time.Duration
+	SkipRemaining bool
 }
