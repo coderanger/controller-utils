@@ -27,6 +27,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,6 +49,7 @@ type Reconciler struct {
 	log               logr.Logger
 	client            client.Client
 	templates         http.FileSystem
+	events            record.EventRecorder
 }
 
 // Concrete component instance.
@@ -139,6 +141,7 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 		return nil, errors.Wrapf(err, "error building controller %s", r.name)
 	}
 	r.controller = controller
+	r.events = r.mgr.GetEventRecorderFor(r.name + "-controller")
 	return controller, nil
 }
 
@@ -151,6 +154,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		Client:    r.client,
 		Templates: r.templates,
 		Scheme:    r.mgr.GetScheme(),
+		Events:    r.events,
 	}
 
 	obj := r.apiType.DeepCopyObject()

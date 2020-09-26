@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -45,6 +46,8 @@ type Context struct {
 	Scheme *runtime.Scheme
 	// Arbitrary data used to communicate between components during a reconcile.
 	Data ContextData
+	// Event recorder to emit event objects.
+	Events record.EventRecorder
 }
 
 func (c *Context) mergeResult(componentResult Result, err error) {
