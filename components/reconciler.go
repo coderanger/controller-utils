@@ -123,9 +123,13 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 	setupObj.SetNamespace("setup")
 	log := r.log.WithName("components")
 	for _, rc := range r.components {
+		setupComp, ok := rc.comp.(ComponentSetup)
+		if !ok {
+			continue
+		}
 		setupCtx.Log = log.WithName(rc.name)
 		setupCtx.FieldManager = fmt.Sprintf("%s/%s", r.name, rc.name)
-		err := rc.comp.Setup(setupCtx, r.controllerBuilder)
+		err := setupComp.Setup(setupCtx, r.controllerBuilder)
 		if err != nil {
 			return nil, errors.Wrapf(err, "error initializing component %s in controller %s", rc.name, r.name)
 		}

@@ -23,8 +23,11 @@ import (
 )
 
 type Component interface {
-	Setup(*Context, *ctrl.Builder) error
 	Reconcile(*Context) (Result, error)
+}
+
+type ComponentSetup interface {
+	Setup(*Context, *ctrl.Builder) error
 }
 
 type Result struct {
