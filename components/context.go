@@ -26,6 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type ContextData map[string]interface{}
+
 type Context struct {
 	context.Context
 	Object runtime.Object // Change this to controllerutil.Object after bumping to 0.6
@@ -41,6 +43,8 @@ type Context struct {
 	FieldManager string
 	// API Scheme for use with other helpers.
 	Scheme *runtime.Scheme
+	// Arbitrary data used to communicate between components during a reconcile.
+	Data ContextData
 }
 
 func (c *Context) mergeResult(componentResult Result, err error) {
@@ -53,4 +57,9 @@ func (c *Context) mergeResult(componentResult Result, err error) {
 	if componentResult.RequeueAfter != 0 && (c.result.RequeueAfter == 0 || c.result.RequeueAfter > componentResult.RequeueAfter) {
 		c.result.RequeueAfter = componentResult.RequeueAfter
 	}
+}
+
+func (d ContextData) GetString(key string) (string, bool) {
+	val, ok := d[key]
+	return val.(string), ok
 }
