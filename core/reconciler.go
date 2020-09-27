@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package core
 
 import (
 	"context"
@@ -38,6 +38,10 @@ import (
 
 // Supporting mocking out functions for testing
 var getGvk = apiutil.GVKForObject
+
+// Avoid an import loop. Sighs in Go.
+var NewRandomSecretComponent func(string, ...string) Component
+var NewTemplateComponent func(string) Component
 
 type Reconciler struct {
 	name              string
@@ -73,6 +77,11 @@ func (r *Reconciler) For(apiType runtime.Object) *Reconciler {
 	return r
 }
 
+func (r *Reconciler) Templates(t http.FileSystem) *Reconciler {
+	r.templates = t
+	return r
+}
+
 func (r *Reconciler) Component(name string, comp Component) *Reconciler {
 	r.components = append(r.components, reconcilerComponent{name: name, comp: comp})
 	return r
@@ -83,9 +92,8 @@ func (r *Reconciler) TemplateComponent(template string) *Reconciler {
 	return r.Component(name, NewTemplateComponent(template))
 }
 
-func (r *Reconciler) Templates(t http.FileSystem) *Reconciler {
-	r.templates = t
-	return r
+func (r *Reconciler) RandomSecretComponent(name string, keys ...string) *Reconciler {
+	return r.Component(name, NewRandomSecretComponent("%s-"+name, keys...))
 }
 
 func (r *Reconciler) Complete() error {
@@ -155,6 +163,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		Templates: r.templates,
 		Scheme:    r.mgr.GetScheme(),
 		Events:    r.events,
+		Data:      ContextData{},
 	}
 
 	obj := r.apiType.DeepCopyObject()
@@ -200,7 +209,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// Save the object status.
 	err = r.client.Status().Patch(ctx, ctx.Object, client.MergeFrom(cleanObj), &client.PatchOptions{FieldManager: r.name})
 	if err != nil {
-		return ctx.result, errors.Wrap(err, "error applying status")
+		return ctx.result, errors.Wrap(err, "error patching status")
 	}
 
 	return ctx.result, nil

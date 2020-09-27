@@ -17,24 +17,26 @@ limitations under the License.
 package components
 
 import (
-	"github.com/coderanger/controller-utils/templates"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/coderanger/controller-utils/core"
+	"github.com/coderanger/controller-utils/templates"
 )
 
 type templateComponent struct {
 	template string
 }
 
-func NewTemplateComponent(template string) Component {
+func NewTemplateComponent(template string) core.Component {
 	return &templateComponent{template}
 }
 
-func (comp *templateComponent) Setup(ctx *Context, bldr *ctrl.Builder) error {
+func (comp *templateComponent) Setup(ctx *core.Context, bldr *ctrl.Builder) error {
 	// Render with a fake, blank object just to find the object type.
 	obj, err := comp.renderTemplate(ctx, true)
 	if err != nil {
@@ -44,25 +46,30 @@ func (comp *templateComponent) Setup(ctx *Context, bldr *ctrl.Builder) error {
 	return nil
 }
 
-func (comp *templateComponent) Reconcile(ctx *Context) (Result, error) {
+func (comp *templateComponent) Reconcile(ctx *core.Context) (core.Result, error) {
 	obj, err := comp.renderTemplate(ctx, true)
 	if err != nil {
-		return Result{}, errors.Wrap(err, "error rendering template")
+		return core.Result{}, errors.Wrap(err, "error rendering template")
 	}
 	err = controllerutil.SetControllerReference(ctx.Object.(metav1.Object), obj.(metav1.Object), ctx.Scheme)
 	if err != nil {
-		return Result{}, errors.Wrap(err, "error setting owner reference")
+		return core.Result{}, errors.Wrap(err, "error setting owner reference")
 	}
 	// Sigh *bool.
 	force := true
 	err = ctx.Client.Patch(ctx, obj, client.Apply, &client.PatchOptions{Force: &force, FieldManager: ctx.FieldManager})
 	if err != nil {
-		return Result{}, errors.Wrap(err, "error applying object")
+		return core.Result{}, errors.Wrap(err, "error applying object")
 	}
-	return Result{}, nil
+	return core.Result{}, nil
 }
 
-func (comp *templateComponent) renderTemplate(ctx *Context, unstructured bool) (runtime.Object, error) {
+func (comp *templateComponent) renderTemplate(ctx *core.Context, unstructured bool) (runtime.Object, error) {
 	templateData := struct{ Object runtime.Object }{Object: ctx.Object}
 	return templates.Get(ctx.Templates, comp.template, unstructured, templateData)
+}
+
+func init() {
+	// Avoid import loops.
+	core.NewTemplateComponent = NewTemplateComponent
 }

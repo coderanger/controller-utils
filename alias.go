@@ -16,18 +16,36 @@ limitations under the License.
 
 package controllerutils
 
-import "github.com/coderanger/controller-utils/components"
+import (
+	"github.com/coderanger/controller-utils/components"
+	"github.com/coderanger/controller-utils/core"
+	"github.com/coderanger/controller-utils/tests"
+)
 
-type Component = components.Component
+type Component = core.Component
 
-type Context = components.Context
+type Context = core.Context
 
-type Reconciler = components.Reconciler
+type Reconciler = core.Reconciler
 
-type Result = components.Result
+type Result = core.Result
+
+type UnitSuiteHelper = tests.UnitSuiteHelper
+
+type UnitHelper = tests.UnitHelper
+
+type FunctionalSuiteHelper = tests.FunctionalSuiteHelper
+
+type FunctionalHelper = tests.FunctionalHelper
 
 var (
-	NewReconciler = components.NewReconciler
+	NewReconciler = core.NewReconciler
 
 	NewTemplateComponent = components.NewTemplateComponent
+
+	NewRandomSecretComponent = components.NewRandomSecretComponent
+
+	Unit = tests.Unit
+
+	Functional = tests.Functional
 )

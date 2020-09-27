@@ -131,7 +131,11 @@ func (fsh *FunctionalSuiteHelper) MustStop() {
 func (fsh *FunctionalSuiteHelper) Start(controllers ...managerAdder) (*FunctionalHelper, error) {
 	fh := &FunctionalHelper{}
 
-	mgr, err := manager.New(fsh.cfg, manager.Options{})
+	mgr, err := manager.New(fsh.cfg, manager.Options{
+		// Disable both listeners so tests don't raise a "Do you want to allow ... to listen" dialog on macOS.
+		MetricsBindAddress:     "0",
+		HealthProbeBindAddress: "0",
+	})
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating manager")
 	}

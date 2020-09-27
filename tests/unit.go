@@ -20,15 +20,15 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/coderanger/controller-utils/core"
 	"github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	"github.com/coderanger/controller-utils/components"
 )
 
 type unitBuilder struct {
@@ -42,12 +42,12 @@ type UnitSuiteHelper struct {
 }
 
 type UnitHelper struct {
-	Comp       components.Component
+	Comp       core.Component
 	Client     client.Client
 	TestClient *testClient
 	Object     runtime.Object
 	Events     chan string
-	Ctx        *components.Context
+	Ctx        *core.Context
 }
 
 func Unit() *unitBuilder {
@@ -65,7 +65,7 @@ func (b *unitBuilder) Templates(templates http.FileSystem) *unitBuilder {
 }
 
 func (b *unitBuilder) Build() (*UnitSuiteHelper, error) {
-	scheme := runtime.NewScheme()
+	scheme := scheme.Scheme
 
 	// Add all requested APIs to the global scheme.
 	for _, adder := range b.apis {
@@ -84,7 +84,7 @@ func (b *unitBuilder) MustBuild() *UnitSuiteHelper {
 	return ush
 }
 
-func (ush *UnitSuiteHelper) Setup(comp components.Component, obj runtime.Object) *UnitHelper {
+func (ush *UnitSuiteHelper) Setup(comp core.Component, obj runtime.Object) *UnitHelper {
 	uh := &UnitHelper{Comp: comp}
 
 	metaObj := obj.(metav1.Object)
@@ -102,14 +102,14 @@ func (ush *UnitSuiteHelper) Setup(comp components.Component, obj runtime.Object)
 	events := record.NewFakeRecorder(100)
 	uh.Events = events.Events
 
-	ctx := &components.Context{
+	ctx := &core.Context{
 		Context:      context.Background(),
 		Object:       uh.Object,
 		Client:       uh.Client,
 		Templates:    ush.templates,
 		FieldManager: "unit-tests",
 		Scheme:       ush.scheme,
-		Data:         components.ContextData{},
+		Data:         core.ContextData{},
 		Events:       events,
 	}
 	uh.Ctx = ctx
@@ -117,12 +117,12 @@ func (ush *UnitSuiteHelper) Setup(comp components.Component, obj runtime.Object)
 	return uh
 }
 
-func (uh *UnitHelper) Reconcile() (components.Result, error) {
+func (uh *UnitHelper) Reconcile() (core.Result, error) {
 	uh.TestClient.Update(uh.Object)
 	return uh.Comp.Reconcile(uh.Ctx)
 }
 
-func (uh *UnitHelper) MustReconcile() components.Result {
+func (uh *UnitHelper) MustReconcile() core.Result {
 	res, err := uh.Reconcile()
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	return res
