@@ -18,6 +18,7 @@ package components
 
 import (
 	"fmt"
+	"net/http"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -59,7 +60,7 @@ var _ = AfterSuite(func() {
 
 func newTestController(components ...core.Component) func(ctrl.Manager) error {
 	return func(mgr ctrl.Manager) error {
-		b := core.NewReconciler(mgr).For(&corev1.ConfigMap{})
+		b := core.NewReconciler(mgr).For(&corev1.ConfigMap{}).Templates(http.Dir("test_templates"))
 		for i, comp := range components {
 			b = b.Component(fmt.Sprintf("test%d", i), comp)
 		}

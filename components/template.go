@@ -47,16 +47,26 @@ func (comp *templateComponent) Setup(ctx *core.Context, bldr *ctrl.Builder) erro
 }
 
 func (comp *templateComponent) Reconcile(ctx *core.Context) (core.Result, error) {
+	// Render the object to an Unstructured.
 	obj, err := comp.renderTemplate(ctx, true)
 	if err != nil {
 		return core.Result{}, errors.Wrap(err, "error rendering template")
 	}
+
+	// Default the namespace to the controlling object namespace.
+	metaObj := obj.(metav1.Object)
+	if metaObj.GetNamespace() == "" {
+		metaObj.SetNamespace(ctx.Object.(metav1.Object).GetNamespace())
+	}
+
+	// Set owner reference.
 	err = controllerutil.SetControllerReference(ctx.Object.(metav1.Object), obj.(metav1.Object), ctx.Scheme)
 	if err != nil {
 		return core.Result{}, errors.Wrap(err, "error setting owner reference")
 	}
-	// Sigh *bool.
-	force := true
+
+	// Apply the object data.
+	force := true // Sigh *bool.
 	err = ctx.Client.Patch(ctx, obj, client.Apply, &client.PatchOptions{Force: &force, FieldManager: ctx.FieldManager})
 	if err != nil {
 		return core.Result{}, errors.Wrap(err, "error applying object")
