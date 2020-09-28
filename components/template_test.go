@@ -56,5 +56,53 @@ var _ = Describe("Template component", func() {
 		c.EventuallyGetName("testing-webserver", deployment)
 		Expect(deployment.Spec.Replicas).To(PointTo(BeEquivalentTo(0)))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("webserver"))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("nginx"))
+	})
+
+	It("overwrites fields controlled by the template but not others", func() {
+		comp := NewTemplateComponent("deployment.yml")
+		helper = startTestController(comp)
+		c := helper.TestClient
+
+		replicas := int32(1)
+		preDeployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "testing-webserver"},
+			Spec: appsv1.DeploymentSpec{
+				Replicas:        &replicas,
+				MinReadySeconds: 42,
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "webserver",
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": "webserver",
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "webserver",
+								Image: "other",
+							},
+						},
+					},
+				},
+			},
+		}
+		c.Create(preDeployment)
+
+		c.Create(obj)
+
+		deployment := &appsv1.Deployment{}
+		c.EventuallyGetName("testing-webserver", deployment, c.EventuallyValue(PointTo(BeEquivalentTo(0)), func(obj runtime.Object) (interface{}, error) {
+			return obj.(*appsv1.Deployment).Spec.Replicas, nil
+		}))
+		Expect(deployment.Spec.Replicas).To(PointTo(BeEquivalentTo(0)))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("webserver"))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("nginx"))
+		Expect(deployment.Spec.MinReadySeconds).To(BeEquivalentTo(42))
 	})
 })
