@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/coderanger/controller-utils/tests"
 )
@@ -33,7 +34,7 @@ var _ = Describe("Template component", func() {
 	var obj runtime.Object
 
 	BeforeEach(func() {
-		obj = &corev1.ConfigMap{
+		obj = &TestObject{
 			ObjectMeta: metav1.ObjectMeta{Name: "testing"},
 		}
 	})
@@ -46,7 +47,7 @@ var _ = Describe("Template component", func() {
 	})
 
 	It("creates a deployment", func() {
-		comp := NewTemplateComponent("deployment.yml")
+		comp := NewTemplateComponent("deployment.yml", nil)
 		helper = startTestController(comp)
 		c := helper.TestClient
 
@@ -60,7 +61,7 @@ var _ = Describe("Template component", func() {
 	})
 
 	It("overwrites fields controlled by the template but not others", func() {
-		comp := NewTemplateComponent("deployment.yml")
+		comp := NewTemplateComponent("deployment.yml", nil)
 		helper = startTestController(comp)
 		c := helper.TestClient
 
@@ -104,5 +105,36 @@ var _ = Describe("Template component", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("webserver"))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("nginx"))
 		Expect(deployment.Spec.MinReadySeconds).To(BeEquivalentTo(42))
+	})
+
+	It("sets a status condition", func() {
+		comp := NewTemplateComponent("deployment.yml", TemplateConditionGetter("DeploymentAvailable", "Available"))
+		helper = startTestController(comp)
+		c := helper.TestClient
+
+		c.Create(obj)
+
+		c.EventuallyGetName("testing", obj, c.EventuallyCondition("DeploymentAvailable", "Unknown"))
+
+		deployment := &appsv1.Deployment{}
+		c.GetName("testing-webserver", deployment)
+		deploymentClean := deployment.DeepCopy()
+		deployment.Status.Conditions = []appsv1.DeploymentCondition{
+			{
+				Type:   "Available",
+				Status: corev1.ConditionFalse,
+				Reason: "Fake",
+			},
+		}
+		c.Status().Patch(deployment, client.MergeFrom(deploymentClean))
+
+		c.EventuallyGetName("testing", obj, c.EventuallyCondition("DeploymentAvailable", "False"))
+
+		c.GetName("testing-webserver", deployment)
+		deploymentClean = deployment.DeepCopy()
+		deployment.Status.Conditions[0].Status = corev1.ConditionTrue
+		c.Status().Patch(deployment, client.MergeFrom(deploymentClean))
+
+		c.EventuallyGetName("testing", obj, c.EventuallyCondition("DeploymentAvailable", "True"))
 	})
 })

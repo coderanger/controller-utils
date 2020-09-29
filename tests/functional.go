@@ -24,6 +24,7 @@ import (
 
 	"github.com/onsi/gomega"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
 type schemeAdder func(*runtime.Scheme) error
@@ -51,12 +53,12 @@ type FunctionalSuiteHelper struct {
 }
 
 type FunctionalHelper struct {
-	managerStop chan struct{}
-	managerDone chan struct{}
-	RawClient   client.Client
-	Client      client.Client
-	TestClient  *testClient
-	Namespace   string
+	managerStop    chan struct{}
+	managerDone    chan struct{}
+	UncachedClient client.Client
+	Client         client.Client
+	TestClient     *testClient
+	Namespace      string
 }
 
 func Functional() *functionalBuilder {
@@ -161,7 +163,7 @@ func (fsh *FunctionalSuiteHelper) Start(controllers ...managerAdder) (*Functiona
 
 	// Grab the clients.
 	fh.Client = mgr.GetClient()
-	fh.RawClient, err = client.New(fsh.cfg, client.Options{Scheme: mgr.GetScheme()})
+	fh.UncachedClient, err = client.New(fsh.cfg, client.Options{Scheme: mgr.GetScheme()})
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating raw client")
 	}
@@ -171,10 +173,11 @@ func (fsh *FunctionalSuiteHelper) Start(controllers ...managerAdder) (*Functiona
 	rand.Read(namespaceNameBytes)
 	namespaceName := "test-" + hex.EncodeToString(namespaceNameBytes)
 	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespaceName}}
-	err = fh.RawClient.Create(context.Background(), namespace)
+	err = fh.UncachedClient.Create(context.Background(), namespace)
 	if err != nil {
 		return nil, errors.Wrapf(err, "error creating test namespace %s", namespaceName)
 	}
+	fh.Namespace = namespaceName
 
 	// Create a namespace-bound test client.
 	fh.TestClient = &testClient{client: fh.Client, namespace: namespaceName}
@@ -194,6 +197,8 @@ func (fh *FunctionalHelper) Stop() error {
 		// TODO maybe replace this with my own timeout so it doesn't use Gomega.
 		gomega.Eventually(fh.managerDone).Should(gomega.BeClosed())
 	}
+	// TODO This is not needed in controller-runtime 0.6 or above, revisit.
+	metrics.Registry = prometheus.NewRegistry()
 	return nil
 }
 

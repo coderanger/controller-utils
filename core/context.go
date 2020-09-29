@@ -31,9 +31,10 @@ type ContextData map[string]interface{}
 
 type Context struct {
 	context.Context
-	Object runtime.Object // Change this to controllerutil.Object after bumping to 0.6
-	Client client.Client
-	Log    logr.Logger
+	Object         runtime.Object // Change this to controllerutil.Object after bumping to 0.6
+	Client         client.Client
+	UncachedClient client.Client
+	Log            logr.Logger
 	// Pending result at the end of things.
 	result ctrl.Result
 	// Most recent component error, if any.

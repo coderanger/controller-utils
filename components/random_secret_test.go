@@ -24,7 +24,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/coderanger/controller-utils/core"
@@ -32,25 +31,28 @@ import (
 )
 
 type exposeDataComponent struct {
-	dest *core.ContextData
+	namespace string
+	dest      *core.ContextData
 }
 
 func (comp *exposeDataComponent) Reconcile(ctx *core.Context) (core.Result, error) {
-	*comp.dest = ctx.Data
+	metaObj := ctx.Object.(metav1.Object)
+	if comp.namespace == metaObj.GetNamespace() {
+		*comp.dest = ctx.Data
+	}
 	return core.Result{}, nil
 }
 
 var _ = Describe("RandomSecret component", func() {
-	var contextData core.ContextData
-	var exposeDataComp core.Component
 	var helper *tests.FunctionalHelper
-	var obj runtime.Object
+	var obj *TestObject
+	var readyStatusComp core.Component
 
 	BeforeEach(func() {
-		exposeDataComp = &exposeDataComponent{dest: &contextData}
-		obj = &corev1.ConfigMap{
+		obj = &TestObject{
 			ObjectMeta: metav1.ObjectMeta{Name: "testing"},
 		}
+		readyStatusComp = NewReadyStatusComponent()
 	})
 
 	AfterEach(func() {
@@ -61,40 +63,52 @@ var _ = Describe("RandomSecret component", func() {
 	})
 
 	It("creates a secret", func() {
+		var contextData core.ContextData
+		exposeDataComp := &exposeDataComponent{dest: &contextData}
 		comp := NewRandomSecretComponent("random", "key")
-		helper = startTestController(comp, exposeDataComp)
+		helper = startTestController(comp, exposeDataComp, readyStatusComp)
+		exposeDataComp.namespace = helper.Namespace
 		c := helper.TestClient
 
 		c.Create(obj)
+		c.EventuallyGetName(obj.Name, obj, c.EventuallyCondition("Ready", "True"))
 
 		secret := &corev1.Secret{}
-		c.EventuallyGetName("random", secret)
+		c.GetName("random", secret)
 		Expect(secret.Data).To(HaveKeyWithValue("key", HaveLen(43)))
 		Expect(contextData).To(HaveKeyWithValue("key", BeEquivalentTo(secret.Data["key"])))
 	})
 
 	It("uses password as the default key", func() {
+		var contextData core.ContextData
+		exposeDataComp := &exposeDataComponent{dest: &contextData}
 		comp := NewRandomSecretComponent("random")
-		helper = startTestController(comp, exposeDataComp)
+		helper = startTestController(comp, exposeDataComp, readyStatusComp)
+		exposeDataComp.namespace = helper.Namespace
 		c := helper.TestClient
 
 		c.Create(obj)
+		c.EventuallyGetName(obj.Name, obj, c.EventuallyCondition("Ready", "True"))
 
 		secret := &corev1.Secret{}
-		c.EventuallyGetName("random", secret)
+		c.GetName("random", secret)
 		Expect(secret.Data).To(HaveKeyWithValue("password", HaveLen(43)))
 		Expect(contextData).To(HaveKeyWithValue("password", BeEquivalentTo(secret.Data["password"])))
 	})
 
 	It("creates multiple keys", func() {
+		var contextData core.ContextData
+		exposeDataComp := &exposeDataComponent{dest: &contextData}
 		comp := NewRandomSecretComponent("random", "key1", "key2")
-		helper = startTestController(comp, exposeDataComp)
+		helper = startTestController(comp, exposeDataComp, readyStatusComp)
+		exposeDataComp.namespace = helper.Namespace
 		c := helper.TestClient
 
 		c.Create(obj)
+		c.EventuallyGetName(obj.Name, obj, c.EventuallyCondition("Ready", "True"))
 
 		secret := &corev1.Secret{}
-		c.EventuallyGetName("random", secret)
+		c.GetName("random", secret)
 		Expect(secret.Data).To(HaveKeyWithValue("key1", HaveLen(43)))
 		Expect(contextData).To(HaveKeyWithValue("key1", BeEquivalentTo(secret.Data["key1"])))
 		Expect(secret.Data).To(HaveKeyWithValue("key2", HaveLen(43)))
@@ -103,11 +117,15 @@ var _ = Describe("RandomSecret component", func() {
 	})
 
 	It("handles a dynamic name", func() {
+		var contextData core.ContextData
+		exposeDataComp := &exposeDataComponent{dest: &contextData}
 		comp := NewRandomSecretComponent("%s-random", "key")
-		helper = startTestController(comp, exposeDataComp)
+		helper = startTestController(comp, exposeDataComp, readyStatusComp)
+		exposeDataComp.namespace = helper.Namespace
 		c := helper.TestClient
 
 		c.Create(obj)
+		c.EventuallyGetName(obj.Name, obj, c.EventuallyCondition("Ready", "True"))
 
 		secret := &corev1.Secret{}
 		c.EventuallyGetName("testing-random", secret)
@@ -116,8 +134,11 @@ var _ = Describe("RandomSecret component", func() {
 	})
 
 	It("updates an existing blank secret", func() {
+		var contextData core.ContextData
+		exposeDataComp := &exposeDataComponent{dest: &contextData}
 		comp := NewRandomSecretComponent("random", "key")
-		helper = startTestController(comp, exposeDataComp)
+		helper = startTestController(comp, exposeDataComp, readyStatusComp)
+		exposeDataComp.namespace = helper.Namespace
 		c := helper.TestClient
 
 		preSecret := &corev1.Secret{
@@ -126,18 +147,20 @@ var _ = Describe("RandomSecret component", func() {
 		c.Create(preSecret)
 
 		c.Create(obj)
+		c.EventuallyGetName(obj.Name, obj, c.EventuallyCondition("Ready", "True"))
 
 		secret := &corev1.Secret{}
-		c.EventuallyGetName("random", secret, c.EventuallyValue(Not(BeEmpty()), func(obj runtime.Object) (interface{}, error) {
-			return obj.(*corev1.Secret).Data, nil
-		}))
+		c.GetName("random", secret)
 		Expect(secret.Data).To(HaveKeyWithValue("key", HaveLen(43)))
 		Expect(contextData).To(HaveKeyWithValue("key", BeEquivalentTo(secret.Data["key"])))
 	})
 
 	It("updates an existing empty key", func() {
+		var contextData core.ContextData
+		exposeDataComp := &exposeDataComponent{dest: &contextData}
 		comp := NewRandomSecretComponent("random", "key")
-		helper = startTestController(comp, exposeDataComp)
+		helper = startTestController(comp, exposeDataComp, readyStatusComp)
+		exposeDataComp.namespace = helper.Namespace
 		c := helper.TestClient
 
 		preSecret := &corev1.Secret{
@@ -149,18 +172,20 @@ var _ = Describe("RandomSecret component", func() {
 		c.Create(preSecret)
 
 		c.Create(obj)
+		c.EventuallyGetName(obj.Name, obj, c.EventuallyCondition("Ready", "True"))
 
 		secret := &corev1.Secret{}
-		c.EventuallyGetName("random", secret, c.EventuallyValue(HaveKeyWithValue("key", Not(BeEmpty())), func(obj runtime.Object) (interface{}, error) {
-			return obj.(*corev1.Secret).Data, nil
-		}))
+		c.GetName("random", secret)
 		Expect(secret.Data).To(HaveKeyWithValue("key", HaveLen(43)))
 		Expect(contextData).To(HaveKeyWithValue("key", BeEquivalentTo(secret.Data["key"])))
 	})
 
 	It("does not update other existing keys", func() {
+		var contextData core.ContextData
+		exposeDataComp := &exposeDataComponent{dest: &contextData}
 		comp := NewRandomSecretComponent("random", "key")
-		helper = startTestController(comp, exposeDataComp)
+		helper = startTestController(comp, exposeDataComp, readyStatusComp)
+		exposeDataComp.namespace = helper.Namespace
 		c := helper.TestClient
 
 		preSecret := &corev1.Secret{
@@ -172,19 +197,22 @@ var _ = Describe("RandomSecret component", func() {
 		c.Create(preSecret)
 
 		c.Create(obj)
+		c.EventuallyGetName(obj.Name, obj, c.EventuallyCondition("Ready", "True"))
 
 		secret := &corev1.Secret{}
-		c.EventuallyGetName("random", secret, c.EventuallyValue(HaveKeyWithValue("key", Not(BeEmpty())), func(obj runtime.Object) (interface{}, error) {
-			return obj.(*corev1.Secret).Data, nil
-		}))
+		c.GetName("random", secret)
 		Expect(secret.Data).To(HaveKeyWithValue("key", HaveLen(43)))
 		Expect(contextData).To(HaveKeyWithValue("key", BeEquivalentTo(secret.Data["key"])))
 		Expect(secret.Data).To(HaveKeyWithValue("other", Equal([]byte("foo"))))
 	})
 
 	It("cleans up the secret if the owner is deleted", func() {
+		Skip("Requires controller-manager for gc controller")
+		var contextData core.ContextData
+		exposeDataComp := &exposeDataComponent{dest: &contextData}
 		comp := NewRandomSecretComponent("random", "key")
 		helper = startTestController(comp, exposeDataComp)
+		exposeDataComp.namespace = helper.Namespace
 		c := helper.TestClient
 
 		c.Create(obj)
@@ -195,7 +223,7 @@ var _ = Describe("RandomSecret component", func() {
 		c.Delete(obj)
 
 		Eventually(func() bool {
-			err := helper.Client.Get(context.Background(), types.NamespacedName{Name: "random", Namespace: helper.Namespace}, secret)
+			err := helper.UncachedClient.Get(context.Background(), types.NamespacedName{Name: "random", Namespace: helper.Namespace}, secret)
 			return kerrors.IsNotFound(err)
 		}).Should(BeTrue())
 	})

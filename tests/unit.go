@@ -20,7 +20,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/coderanger/controller-utils/core"
 	"github.com/onsi/gomega"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +28,8 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	"github.com/coderanger/controller-utils/core"
 )
 
 type unitBuilder struct {
@@ -65,17 +66,23 @@ func (b *unitBuilder) Templates(templates http.FileSystem) *unitBuilder {
 }
 
 func (b *unitBuilder) Build() (*UnitSuiteHelper, error) {
-	scheme := scheme.Scheme
+	sch := runtime.NewScheme()
+
+	// Register the default scheme things.
+	err := scheme.AddToScheme(sch)
+	if err != nil {
+		return nil, errors.Wrap(err, "error adding default scheme")
+	}
 
 	// Add all requested APIs to the global scheme.
 	for _, adder := range b.apis {
-		err := adder(scheme)
+		err = adder(sch)
 		if err != nil {
 			return nil, errors.Wrap(err, "error adding scheme")
 		}
 	}
 
-	return &UnitSuiteHelper{templates: b.templates, scheme: scheme}, nil
+	return &UnitSuiteHelper{templates: b.templates, scheme: sch}, nil
 }
 
 func (b *unitBuilder) MustBuild() *UnitSuiteHelper {

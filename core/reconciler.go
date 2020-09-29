@@ -34,6 +34,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/coderanger/controller-utils/conditions"
 )
 
 // Supporting mocking out functions for testing
@@ -41,7 +43,8 @@ var getGvk = apiutil.GVKForObject
 
 // Avoid an import loop. Sighs in Go.
 var NewRandomSecretComponent func(string, ...string) Component
-var NewTemplateComponent func(string) Component
+var NewReadyStatusComponent func(...string) Component
+var NewTemplateComponent func(string, func(runtime.Object) conditions.Condition) Component
 
 type Reconciler struct {
 	name              string
@@ -52,6 +55,7 @@ type Reconciler struct {
 	components        []reconcilerComponent
 	log               logr.Logger
 	client            client.Client
+	uncachedClient    client.Client
 	templates         http.FileSystem
 	events            record.EventRecorder
 }
@@ -63,11 +67,16 @@ type reconcilerComponent struct {
 }
 
 func NewReconciler(mgr ctrl.Manager) *Reconciler {
+	rawClient, err := client.New(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme()})
+	if err != nil {
+		panic(err)
+	}
 	return &Reconciler{
 		mgr:               mgr,
 		controllerBuilder: builder.ControllerManagedBy(mgr),
 		components:        []reconcilerComponent{},
 		client:            mgr.GetClient(),
+		uncachedClient:    rawClient,
 	}
 }
 
@@ -87,13 +96,23 @@ func (r *Reconciler) Component(name string, comp Component) *Reconciler {
 	return r
 }
 
-func (r *Reconciler) TemplateComponent(template string) *Reconciler {
+func (r *Reconciler) TemplateComponent(template string, condGetter func(runtime.Object) conditions.Condition) *Reconciler {
 	name := template[strings.LastIndex(template, ".")+1:]
-	return r.Component(name, NewTemplateComponent(template))
+	return r.Component(name, NewTemplateComponent(template, condGetter))
 }
 
 func (r *Reconciler) RandomSecretComponent(name string, keys ...string) *Reconciler {
-	return r.Component(name, NewRandomSecretComponent("%s-"+name, keys...))
+	// TODO This is super awkward. Maybe just provisionally set r.name from For()?
+	controllerName, err := r.getControllerName()
+	if err != nil {
+		panic(err)
+	}
+	nameTemplate := fmt.Sprintf("%%s-%s-%s", controllerName, name)
+	return r.Component(name, NewRandomSecretComponent(nameTemplate, keys...))
+}
+
+func (r *Reconciler) ReadyStatusComponent(keys ...string) *Reconciler {
+	return r.Component("readyStatus", NewReadyStatusComponent(keys...))
 }
 
 func (r *Reconciler) Complete() error {
@@ -121,11 +140,12 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 	r.log = ctrl.Log.WithName("controllers").WithName(name)
 
 	setupCtx := &Context{
-		Context:   context.Background(),
-		Client:    r.client,
-		Templates: r.templates,
-		Scheme:    r.mgr.GetScheme(),
-		Object:    r.apiType.DeepCopyObject(),
+		Context:        context.Background(),
+		Client:         r.client,
+		UncachedClient: r.uncachedClient,
+		Templates:      r.templates,
+		Scheme:         r.mgr.GetScheme(),
+		Object:         r.apiType.DeepCopyObject(),
 	}
 	// Provide some bare minimum data
 	setupObj := setupCtx.Object.(metav1.Object)
@@ -158,12 +178,13 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	log.Info("Starting reconcile")
 
 	ctx := &Context{
-		Context:   context.Background(),
-		Client:    r.client,
-		Templates: r.templates,
-		Scheme:    r.mgr.GetScheme(),
-		Events:    r.events,
-		Data:      ContextData{},
+		Context:        context.Background(),
+		Client:         r.client,
+		UncachedClient: r.uncachedClient,
+		Templates:      r.templates,
+		Scheme:         r.mgr.GetScheme(),
+		Events:         r.events,
+		Data:           ContextData{},
 	}
 
 	obj := r.apiType.DeepCopyObject()
@@ -208,7 +229,8 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	// Save the object status.
 	err = r.client.Status().Patch(ctx, ctx.Object, client.MergeFrom(cleanObj), &client.PatchOptions{FieldManager: r.name})
-	if err != nil {
+	if err != nil && !kerrors.IsNotFound(err) {
+		// If it was a NotFound error, the object was probably already deleted so just ignore the error and return the existing result.
 		return ctx.result, errors.Wrap(err, "error patching status")
 	}
 

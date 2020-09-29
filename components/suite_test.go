@@ -23,7 +23,6 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -48,7 +47,10 @@ var _ = BeforeSuite(func(done Done) {
 	ctrl.SetLogger(zap.LoggerTo(GinkgoWriter, true))
 
 	By("bootstrapping test environment")
-	suiteHelper = tests.Functional().MustBuild()
+	suiteHelper = tests.Functional().
+		API(TestObjectSchemeBuilder.AddToScheme).
+		CRDPath("test_crds").
+		MustBuild()
 
 	close(done)
 }, 60)
@@ -60,7 +62,7 @@ var _ = AfterSuite(func() {
 
 func newTestController(components ...core.Component) func(ctrl.Manager) error {
 	return func(mgr ctrl.Manager) error {
-		b := core.NewReconciler(mgr).For(&corev1.ConfigMap{}).Templates(http.Dir("test_templates"))
+		b := core.NewReconciler(mgr).For(&TestObject{}).Templates(http.Dir("test_templates"))
 		for i, comp := range components {
 			b = b.Component(fmt.Sprintf("test%d", i), comp)
 		}
@@ -69,5 +71,7 @@ func newTestController(components ...core.Component) func(ctrl.Manager) error {
 }
 
 func startTestController(components ...core.Component) *tests.FunctionalHelper {
-	return suiteHelper.MustStart(newTestController(components...))
+	helper := suiteHelper.MustStart(newTestController(components...))
+	ctrl.Log.WithName("suite_test").Info("Starting test controller", "test", CurrentGinkgoTestDescription().TestText, "namespace", helper.Namespace)
+	return helper
 }

@@ -52,19 +52,23 @@ func defaultNamespace(obj runtime.Object, namespace string) {
 	}
 }
 
-func (c *testClient) Get(key client.ObjectKey, obj runtime.Object) {
+// Implementation used by Get and GetName to keep the stack depth the same.
+func (c *testClient) get(key client.ObjectKey, obj runtime.Object) {
 	if c.namespace != "" && key.Namespace == "" {
 		key.Namespace = c.namespace
 	}
 	err := c.client.Get(context.Background(), key, obj)
-	gomega.ExpectWithOffset(1, err).ToNot(gomega.HaveOccurred())
+	gomega.ExpectWithOffset(2, err).ToNot(gomega.HaveOccurred())
+}
+
+func (c *testClient) Get(key client.ObjectKey, obj runtime.Object) {
+	c.get(key, obj)
 }
 
 func (c *testClient) GetName(name string, obj runtime.Object) {
 	gomega.ExpectWithOffset(1, c.namespace).ToNot(gomega.Equal(""), "Test client namespace not set")
 	key := types.NamespacedName{Name: name, Namespace: c.namespace}
-	err := c.client.Get(context.Background(), key, obj)
-	gomega.ExpectWithOffset(1, err).ToNot(gomega.HaveOccurred())
+	c.get(key, obj)
 }
 
 func (c *testClient) List(list runtime.Object, opts ...client.ListOption) {
@@ -91,6 +95,12 @@ func (c *testClient) Update(obj runtime.Object) {
 	gomega.ExpectWithOffset(1, err).ToNot(gomega.HaveOccurred())
 }
 
+func (c *testClient) Patch(obj runtime.Object, patch client.Patch, opts ...client.PatchOption) {
+	defaultNamespace(obj, c.namespace)
+	err := c.client.Patch(context.Background(), obj, patch, opts...)
+	gomega.ExpectWithOffset(1, err).ToNot(gomega.HaveOccurred())
+}
+
 // Implementation to match StatusClient.
 func (c *testClient) Status() *testStatusClient {
 	return &testStatusClient{client: c.client.Status(), namespace: c.namespace}
@@ -99,6 +109,12 @@ func (c *testClient) Status() *testStatusClient {
 func (c *testStatusClient) Update(obj runtime.Object) {
 	defaultNamespace(obj, c.namespace)
 	err := c.client.Update(context.Background(), obj)
+	gomega.ExpectWithOffset(1, err).ToNot(gomega.HaveOccurred())
+}
+
+func (c *testStatusClient) Patch(obj runtime.Object, patch client.Patch, opts ...client.PatchOption) {
+	defaultNamespace(obj, c.namespace)
+	err := c.client.Patch(context.Background(), obj, patch, opts...)
 	gomega.ExpectWithOffset(1, err).ToNot(gomega.HaveOccurred())
 }
 
@@ -128,23 +144,23 @@ func (_ *testClient) EventuallyValue(matcher gtypes.GomegaMatcher, getter Eventu
 }
 
 // A common case of a value getter for status conditions.
-func (c *testClient) EventuallyCondition(type_ string, status string) eventuallyGetOptionsSetter {
+func (c *testClient) EventuallyCondition(conditionType string, status string) eventuallyGetOptionsSetter {
 	return c.EventuallyValue(gomega.Equal(status), func(obj runtime.Object) (interface{}, error) {
 		// Yes using reflect is kind of gross but it's test-only code so meh. Some day this can be a bit less reflect-y and use metav1.Condition, when everything is on that.
 		conditions := reflect.ValueOf(obj).Elem().FieldByName("Status").FieldByName("Conditions")
 		count := conditions.Len()
 		for i := 0; i < count; i++ {
 			cond := conditions.Index(i)
-			if cond.FieldByName("Type").String() == type_ {
+			if cond.FieldByName("Type").String() == conditionType {
 				return cond.FieldByName("Status").String(), nil
 			}
 		}
-		return nil, errors.Errorf("Condition type %s not found", type_)
+		return nil, errors.Errorf("Condition type %s not found", conditionType)
 	})
 }
 
-// Like a normal Get but run in a loop. By default it will wait until the call succeeds, but can optionally wait for a value.
-func (c *testClient) EventuallyGet(key client.ObjectKey, obj runtime.Object, optSetters ...eventuallyGetOptionsSetter) {
+// Implementation used by EventuallyGet and EventuallyGetName, to keep the stack depth the same.
+func (c *testClient) eventuallyGet(key client.ObjectKey, obj runtime.Object, optSetters ...eventuallyGetOptionsSetter) {
 	if c.namespace != "" && key.Namespace == "" {
 		key.Namespace = c.namespace
 	}
@@ -154,7 +170,7 @@ func (c *testClient) EventuallyGet(key client.ObjectKey, obj runtime.Object, opt
 	}
 
 	if opts.valueGetter != nil {
-		gomega.EventuallyWithOffset(1, func() (interface{}, error) {
+		gomega.EventuallyWithOffset(2, func() (interface{}, error) {
 			var value interface{}
 			err := c.client.Get(context.Background(), key, obj)
 			if err == nil {
@@ -163,13 +179,18 @@ func (c *testClient) EventuallyGet(key client.ObjectKey, obj runtime.Object, opt
 			return value, err
 		}, opts.timeout).Should(opts.matcher)
 	} else {
-		gomega.EventuallyWithOffset(1, func() error {
+		gomega.EventuallyWithOffset(2, func() error {
 			return c.client.Get(context.Background(), key, obj)
 		}, opts.timeout).Should(gomega.Succeed())
 	}
 }
 
+// Like a normal Get but run in a loop. By default it will wait until the call succeeds, but can optionally wait for a value.
+func (c *testClient) EventuallyGet(key client.ObjectKey, obj runtime.Object, optSetters ...eventuallyGetOptionsSetter) {
+	c.eventuallyGet(key, obj, optSetters...)
+}
+
 // EventuallyGet but taking just a name.
 func (c *testClient) EventuallyGetName(name string, obj runtime.Object, optSetters ...eventuallyGetOptionsSetter) {
-	c.EventuallyGet(types.NamespacedName{Name: name}, obj, optSetters...)
+	c.eventuallyGet(types.NamespacedName{Name: name}, obj, optSetters...)
 }

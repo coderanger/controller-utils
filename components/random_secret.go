@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/coderanger/controller-utils/core"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -33,6 +32,8 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/coderanger/controller-utils/core"
 )
 
 const RANDOM_BYTES = 32
@@ -71,7 +72,8 @@ func (comp *randomSecretComponent) Reconcile(ctx *core.Context) (core.Result, er
 		Namespace: obj.GetNamespace(),
 	}
 	existingSecret := &corev1.Secret{}
-	err := ctx.Client.Get(ctx, secretName, existingSecret)
+	// Use the uncached client to avoid race conditions.
+	err := ctx.UncachedClient.Get(ctx, secretName, existingSecret)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			// Patch will create it so no need for anything else specific.
@@ -92,6 +94,7 @@ func (comp *randomSecretComponent) Reconcile(ctx *core.Context) (core.Result, er
 			}
 			val = make([]byte, RandEncoding.EncodedLen(RANDOM_BYTES))
 			RandEncoding.Encode(val, raw)
+			ctx.Events.Eventf(ctx.Object, "Normal", "GeneratedRandomValue", "Generated a random value for key %s", key)
 		}
 		data[key] = val
 		// Store the values into context for use by later components.
