@@ -18,8 +18,11 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/coderanger/controller-utils/conditions"
@@ -51,4 +54,28 @@ func GetConditionsFor(obj runtime.Object) (*[]conditions.Condition, error) {
 	}
 
 	return nil, errors.New("unable to get conditions")
+}
+
+type conditionsHelper struct {
+	obj runtime.Object
+}
+
+func (h *conditionsHelper) Set(conditionType string, status metav1.ConditionStatus, reason string, message ...string) {
+	metaObj := h.obj.(metav1.Object)
+	conds, err := GetConditionsFor(h.obj)
+	if err != nil {
+		// This should be a 100% static error so just panic.
+		panic(err)
+	}
+	conditions.SetStatusCondition(conds, conditions.Condition{
+		Type:               conditionType,
+		Status:             status,
+		ObservedGeneration: metaObj.GetGeneration(),
+		Reason:             reason,
+		Message:            strings.Join(message, ""),
+	})
+}
+
+func (h *conditionsHelper) Setf(conditionType string, status metav1.ConditionStatus, reason string, message string, args ...interface{}) {
+	h.Set(conditionType, status, reason, fmt.Sprintf(message, args...))
 }

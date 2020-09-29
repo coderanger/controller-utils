@@ -17,7 +17,6 @@ limitations under the License.
 package components
 
 import (
-	"fmt"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,25 +49,23 @@ func NewReadyStatusComponent(keys ...string) core.Component {
 }
 
 func (comp *readyStatusComponent) Reconcile(ctx *core.Context) (core.Result, error) {
-	metaObj := ctx.Object.(metav1.Object)
 	objConditions, err := core.GetConditionsFor(ctx.Object)
 	if err != nil {
 		return core.Result{}, errors.Wrap(err, "error getting object conditions")
 	}
-	readyCondition := conditions.Condition{
-		Type:               "Ready", // TODO This should be configurable somehow.
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: metaObj.GetGeneration(),
-		Reason:             "CompositeReady",
-		Message:            fmt.Sprintf("ReadyStatusComponent observed correct status of %s", strings.Join(comp.keys, ", ")),
-	}
-	for conditionType, status := range comp.readyConditions {
-		if !conditions.IsStatusConditionPresentAndEqual(*objConditions, conditionType, status) {
-			readyCondition.Status = metav1.ConditionFalse
+	status := metav1.ConditionTrue
+	reason := "CompositeReady"
+	message := "observed"
+	for conditionType, desiredStatus := range comp.readyConditions {
+		if !conditions.IsStatusConditionPresentAndEqual(*objConditions, conditionType, desiredStatus) {
+			status = metav1.ConditionFalse
+			reason = "CompositeNotRead"
+			message = "did not observe"
 			break
 		}
 	}
-	conditions.SetStatusCondition(objConditions, readyCondition)
+	// TODO The condition type should be configurable somehow.
+	ctx.Conditions.Setf("Ready", status, reason, "ReadyStatusComponent %s correct status of %s", message, strings.Join(comp.keys, ", "))
 	return core.Result{}, nil
 }
 

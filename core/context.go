@@ -49,6 +49,8 @@ type Context struct {
 	Data ContextData
 	// Event recorder to emit event objects.
 	Events record.EventRecorder
+	// Helper for setting status conditions.
+	Conditions *conditionsHelper
 }
 
 func (c *Context) mergeResult(componentResult Result, err error) {
