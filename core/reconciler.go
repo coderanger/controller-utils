@@ -213,6 +213,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// Reconcile the components.
 	compLog := log.WithName("components")
 	for _, rc := range r.components {
+		log.V(1).Info("Reconciling component", "component", rc.name)
 		// Create the per-component logger.
 		ctx.Log = compLog.WithName(rc.name)
 		ctx.FieldManager = fmt.Sprintf("%s/%s", r.name, rc.name)
@@ -224,6 +225,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 		if res.SkipRemaining {
 			// Abort reconcile to skip remaining components.
+			log.V(1).Info("Skipping remaining components")
 			break
 		}
 	}
