@@ -159,6 +159,11 @@ func (c *testClient) EventuallyCondition(conditionType string, status string) ev
 	})
 }
 
+// Even more common case of Ready and True.
+func (c *testClient) EventuallyReady() eventuallyGetOptionsSetter {
+	return c.EventuallyCondition("Ready", "True")
+}
+
 // Implementation used by EventuallyGet and EventuallyGetName, to keep the stack depth the same.
 func (c *testClient) eventuallyGet(key client.ObjectKey, obj runtime.Object, optSetters ...eventuallyGetOptionsSetter) {
 	if c.namespace != "" && key.Namespace == "" {
