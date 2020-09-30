@@ -79,3 +79,27 @@ func (h *conditionsHelper) Set(conditionType string, status metav1.ConditionStat
 func (h *conditionsHelper) Setf(conditionType string, status metav1.ConditionStatus, reason string, message string, args ...interface{}) {
 	h.Set(conditionType, status, reason, fmt.Sprintf(message, args...))
 }
+
+func (h *conditionsHelper) SetTrue(conditionType string, reason string, message ...string) {
+	h.Set(conditionType, metav1.ConditionTrue, reason, message...)
+}
+
+func (h *conditionsHelper) SetfTrue(conditionType string, reason string, message string, args ...interface{}) {
+	h.Setf(conditionType, metav1.ConditionTrue, reason, message, args...)
+}
+
+func (h *conditionsHelper) SetFalse(conditionType string, reason string, message ...string) {
+	h.Set(conditionType, metav1.ConditionFalse, reason, message...)
+}
+
+func (h *conditionsHelper) SetfFalse(conditionType string, reason string, message string, args ...interface{}) {
+	h.Setf(conditionType, metav1.ConditionFalse, reason, message, args...)
+}
+
+func (h *conditionsHelper) SetUnknown(conditionType string, reason string, message ...string) {
+	h.Set(conditionType, metav1.ConditionUnknown, reason, message...)
+}
+
+func (h *conditionsHelper) SetfUnknown(conditionType string, reason string, message string, args ...interface{}) {
+	h.Setf(conditionType, metav1.ConditionUnknown, reason, message, args...)
+}
