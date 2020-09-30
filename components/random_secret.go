@@ -17,7 +17,6 @@ limitations under the License.
 package components
 
 import (
-	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 	"strings"
@@ -34,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/coderanger/controller-utils/core"
+	"github.com/coderanger/controller-utils/randstring"
 )
 
 const RANDOM_BYTES = 32
@@ -87,13 +87,10 @@ func (comp *randomSecretComponent) Reconcile(ctx *core.Context) (core.Result, er
 	for _, key := range comp.keys {
 		val, ok := existingSecret.Data[key]
 		if !ok || len(val) == 0 {
-			raw := make([]byte, RANDOM_BYTES)
-			_, err := rand.Read(raw)
+			val, err = randstring.RandomBytes(RANDOM_BYTES)
 			if err != nil {
 				return core.Result{}, errors.Wrap(err, "error generating random bytes")
 			}
-			val = make([]byte, RandEncoding.EncodedLen(RANDOM_BYTES))
-			RandEncoding.Encode(val, raw)
 			ctx.Events.Eventf(ctx.Object, "Normal", "GeneratedRandomValue", "Generated a random value for key %s", key)
 		}
 		data[key] = val
