@@ -17,11 +17,11 @@ limitations under the License.
 package core
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 
+	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -57,23 +57,40 @@ func GetConditionsFor(obj runtime.Object) (*[]conditions.Condition, error) {
 }
 
 type conditionsHelper struct {
-	obj runtime.Object
+	obj               runtime.Object
+	pendingConditions map[string]*conditions.Condition
+}
+
+func newConditionsHelper(obj runtime.Object) *conditionsHelper {
+	return &conditionsHelper{
+		obj:               obj,
+		pendingConditions: map[string]*conditions.Condition{},
+	}
+}
+
+func (h *conditionsHelper) flush() error {
+	conds, err := GetConditionsFor(h.obj)
+	if err != nil {
+		return errors.Wrap(err, "error getting status conditions")
+	}
+	// Apply all pending conditions.
+	for _, cond := range h.pendingConditions {
+		conditions.SetStatusCondition(conds, *cond)
+	}
+	// Zero out the pending map.
+	h.pendingConditions = map[string]*conditions.Condition{}
+	return nil
 }
 
 func (h *conditionsHelper) Set(conditionType string, status metav1.ConditionStatus, reason string, message ...string) {
 	metaObj := h.obj.(metav1.Object)
-	conds, err := GetConditionsFor(h.obj)
-	if err != nil {
-		// This should be a 100% static error so just panic.
-		panic(err)
-	}
-	conditions.SetStatusCondition(conds, conditions.Condition{
+	h.pendingConditions[conditionType] = &conditions.Condition{
 		Type:               conditionType,
 		Status:             status,
 		ObservedGeneration: metaObj.GetGeneration(),
 		Reason:             reason,
 		Message:            strings.Join(message, ""),
-	})
+	}
 }
 
 func (h *conditionsHelper) Setf(conditionType string, status metav1.ConditionStatus, reason string, message string, args ...interface{}) {

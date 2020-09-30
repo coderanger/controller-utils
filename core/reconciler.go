@@ -198,7 +198,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return reconcile.Result{Requeue: true}, errors.Wrap(err, "error getting reconcile object")
 	}
 	ctx.Object = obj
-	ctx.Conditions = &conditionsHelper{obj: obj}
+	ctx.Conditions = newConditionsHelper(obj)
 	cleanObj := obj.DeepCopyObject()
 
 	// Check for annotation that blocks reconciles, exit early if found.
@@ -217,7 +217,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		ctx.Log = compLog.WithName(rc.name)
 		ctx.FieldManager = fmt.Sprintf("%s/%s", r.name, rc.name)
 		res, err := rc.comp.Reconcile(ctx)
-		ctx.mergeResult(res, err)
+		err = ctx.mergeResult(res, err)
 		if err != nil {
 			log.Error(err, "error in component reconcile", "component", rc.name)
 			return ctx.result, errors.Wrapf(err, "error in %s component reconcile", rc.name)

@@ -53,7 +53,12 @@ type Context struct {
 	Conditions *conditionsHelper
 }
 
-func (c *Context) mergeResult(componentResult Result, err error) {
+func (c *Context) mergeResult(componentResult Result, err error) error {
+	condErr := c.Conditions.flush()
+	if condErr != nil && err == nil {
+		err = condErr
+	}
+
 	if err != nil {
 		c.err = err
 	}
@@ -63,6 +68,8 @@ func (c *Context) mergeResult(componentResult Result, err error) {
 	if componentResult.RequeueAfter != 0 && (c.result.RequeueAfter == 0 || c.result.RequeueAfter > componentResult.RequeueAfter) {
 		c.result.RequeueAfter = componentResult.RequeueAfter
 	}
+
+	return c.err
 }
 
 func (d ContextData) GetString(key string) (string, bool) {
