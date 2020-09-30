@@ -61,14 +61,14 @@ type conditionsHelper struct {
 	pendingConditions map[string]*conditions.Condition
 }
 
-func newConditionsHelper(obj runtime.Object) *conditionsHelper {
+func NewConditionsHelper(obj runtime.Object) *conditionsHelper {
 	return &conditionsHelper{
 		obj:               obj,
 		pendingConditions: map[string]*conditions.Condition{},
 	}
 }
 
-func (h *conditionsHelper) flush() error {
+func (h *conditionsHelper) Flush() error {
 	conds, err := GetConditionsFor(h.obj)
 	if err != nil {
 		return errors.Wrap(err, "error getting status conditions")

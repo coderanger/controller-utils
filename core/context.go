@@ -54,7 +54,7 @@ type Context struct {
 }
 
 func (c *Context) mergeResult(componentResult Result, err error) error {
-	condErr := c.Conditions.flush()
+	condErr := c.Conditions.Flush()
 	if condErr != nil && err == nil {
 		err = condErr
 	}

@@ -198,7 +198,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return reconcile.Result{Requeue: true}, errors.Wrap(err, "error getting reconcile object")
 	}
 	ctx.Object = obj
-	ctx.Conditions = newConditionsHelper(obj)
+	ctx.Conditions = NewConditionsHelper(obj)
 	cleanObj := obj.DeepCopyObject()
 
 	// Check for annotation that blocks reconciles, exit early if found.

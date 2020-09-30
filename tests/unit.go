@@ -118,6 +118,7 @@ func (ush *UnitSuiteHelper) Setup(comp core.Component, obj runtime.Object) *Unit
 		Scheme:       ush.scheme,
 		Data:         core.ContextData{},
 		Events:       events,
+		Conditions:   core.NewConditionsHelper(uh.Object),
 	}
 	uh.Ctx = ctx
 
@@ -126,7 +127,12 @@ func (ush *UnitSuiteHelper) Setup(comp core.Component, obj runtime.Object) *Unit
 
 func (uh *UnitHelper) Reconcile() (core.Result, error) {
 	uh.TestClient.Update(uh.Object)
-	return uh.Comp.Reconcile(uh.Ctx)
+	res, err := uh.Comp.Reconcile(uh.Ctx)
+	compErr := uh.Ctx.Conditions.Flush()
+	if compErr != nil && err == nil {
+		err = compErr
+	}
+	return res, err
 }
 
 func (uh *UnitHelper) MustReconcile() core.Result {
