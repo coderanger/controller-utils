@@ -31,7 +31,7 @@ type ContextData map[string]interface{}
 
 type Context struct {
 	context.Context
-	Object         runtime.Object // Change this to controllerutil.Object after bumping to 0.6
+	Object         Object
 	Client         client.Client
 	UncachedClient client.Client
 	Log            logr.Logger
@@ -76,3 +76,5 @@ func (d ContextData) GetString(key string) (string, bool) {
 	val, ok := d[key]
 	return val.(string), ok
 }
+
+// TODO Other type accessors for ContextData.

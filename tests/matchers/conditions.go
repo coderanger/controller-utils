@@ -21,7 +21,6 @@ import (
 
 	"github.com/onsi/gomega"
 	"github.com/pkg/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/coderanger/controller-utils/conditions"
 	"github.com/coderanger/controller-utils/core"
@@ -48,7 +47,7 @@ func (matcher *haveConditionMatcher) WithReason(reason string) *haveConditionMat
 }
 
 func (matcher *haveConditionMatcher) Match(actual interface{}) (bool, error) {
-	obj, ok := actual.(runtime.Object)
+	obj, ok := actual.(core.Object)
 	if !ok {
 		return false, fmt.Errorf("HaveCondition matcher expects a runtime.Object")
 	}
@@ -101,7 +100,7 @@ func (matcher *haveConditionMatcher) message(actual interface{}, polarity bool) 
 		joiner = "not "
 	}
 
-	obj, ok := actual.(runtime.Object)
+	obj, ok := actual.(core.Object)
 	if ok {
 		conds, err := core.GetConditionsFor(obj)
 		if err == nil {

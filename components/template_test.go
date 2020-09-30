@@ -47,7 +47,7 @@ var _ = Describe("Template component", func() {
 	})
 
 	It("creates a deployment", func() {
-		comp := NewTemplateComponent("deployment.yml", nil)
+		comp := NewTemplateComponent("deployment.yml", "")
 		helper = startTestController(comp)
 		c := helper.TestClient
 
@@ -61,7 +61,7 @@ var _ = Describe("Template component", func() {
 	})
 
 	It("overwrites fields controlled by the template but not others", func() {
-		comp := NewTemplateComponent("deployment.yml", nil)
+		comp := NewTemplateComponent("deployment.yml", "")
 		helper = startTestController(comp)
 		c := helper.TestClient
 
@@ -108,7 +108,7 @@ var _ = Describe("Template component", func() {
 	})
 
 	It("sets a status condition", func() {
-		comp := NewTemplateComponent("deployment.yml", TemplateConditionGetter("DeploymentAvailable", "Available"))
+		comp := NewTemplateComponent("deployment.yml", "DeploymentAvailable")
 		helper = startTestController(comp)
 		c := helper.TestClient
 

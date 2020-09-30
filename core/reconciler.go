@@ -34,8 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/coderanger/controller-utils/conditions"
 )
 
 // Supporting mocking out functions for testing
@@ -44,7 +42,7 @@ var getGvk = apiutil.GVKForObject
 // Avoid an import loop. Sighs in Go.
 var NewRandomSecretComponent func(string, ...string) Component
 var NewReadyStatusComponent func(...string) Component
-var NewTemplateComponent func(string, func(runtime.Object) conditions.Condition) Component
+var NewTemplateComponent func(string, string) Component
 
 type Reconciler struct {
 	name              string
@@ -96,9 +94,9 @@ func (r *Reconciler) Component(name string, comp Component) *Reconciler {
 	return r
 }
 
-func (r *Reconciler) TemplateComponent(template string, condGetter func(runtime.Object) conditions.Condition) *Reconciler {
+func (r *Reconciler) TemplateComponent(template string, conditionType string) *Reconciler {
 	name := template[strings.LastIndex(template, ".")+1:]
-	return r.Component(name, NewTemplateComponent(template, condGetter))
+	return r.Component(name, NewTemplateComponent(template, conditionType))
 }
 
 func (r *Reconciler) RandomSecretComponent(name string, keys ...string) *Reconciler {
@@ -145,7 +143,7 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 		UncachedClient: r.uncachedClient,
 		Templates:      r.templates,
 		Scheme:         r.mgr.GetScheme(),
-		Object:         r.apiType.DeepCopyObject(),
+		Object:         r.apiType.DeepCopyObject().(Object),
 	}
 	// Provide some bare minimum data
 	setupObj := setupCtx.Object.(metav1.Object)
@@ -197,13 +195,12 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 		return reconcile.Result{Requeue: true}, errors.Wrap(err, "error getting reconcile object")
 	}
-	ctx.Object = obj
-	ctx.Conditions = NewConditionsHelper(obj)
+	ctx.Object = obj.(Object)
+	ctx.Conditions = NewConditionsHelper(ctx.Object)
 	cleanObj := obj.DeepCopyObject()
 
 	// Check for annotation that blocks reconciles, exit early if found.
-	metaObj := obj.(metav1.Object)
-	annotations := metaObj.GetAnnotations()
+	annotations := ctx.Object.GetAnnotations()
 	reconcileBlocked, ok := annotations["controller-utils/skip-reconcile"]
 	if ok && reconcileBlocked == "true" {
 		log.Info("Skipping reconcile due to annotation")

@@ -24,7 +24,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -60,16 +59,14 @@ func (comp *randomSecretComponent) Setup(_ *core.Context, bldr *ctrl.Builder) er
 }
 
 func (comp *randomSecretComponent) Reconcile(ctx *core.Context) (core.Result, error) {
-	obj := ctx.Object.(metav1.Object)
-
 	name := comp.name
 	if strings.Contains(name, "%s") {
-		name = fmt.Sprintf(name, obj.GetName())
+		name = fmt.Sprintf(name, ctx.Object.GetName())
 	}
 
 	secretName := types.NamespacedName{
 		Name:      name,
-		Namespace: obj.GetNamespace(),
+		Namespace: ctx.Object.GetNamespace(),
 	}
 	existingSecret := &corev1.Secret{}
 	// Use the uncached client to avoid race conditions.
@@ -108,7 +105,7 @@ func (comp *randomSecretComponent) Reconcile(ctx *core.Context) (core.Result, er
 	secret.SetNamespace(secretName.Namespace)
 	secret.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
 
-	err = controllerutil.SetControllerReference(obj, secret, ctx.Scheme)
+	err = controllerutil.SetControllerReference(ctx.Object, secret, ctx.Scheme)
 	if err != nil {
 		return core.Result{}, errors.Wrap(err, "error setting owner reference")
 	}

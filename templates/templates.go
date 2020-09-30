@@ -19,6 +19,7 @@ package templates
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 	"path"
@@ -30,8 +31,9 @@ import (
 	"github.com/shurcooL/httpfs/vfsutil"
 	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
+
+	"github.com/coderanger/controller-utils/core"
 )
 
 func parseTemplate(fs http.FileSystem, filename string) (*template.Template, error) {
@@ -91,13 +93,17 @@ func renderTemplate(tmpl *template.Template, data interface{}) ([]byte, error) {
 }
 
 // Parse the rendered data into an object. The caller has to cast it from a
-// runtime.Object into the correct type.
-func parseObject(rawObject []byte) (runtime.Object, error) {
+// core.Object into the correct type.
+func parseObject(rawObject []byte) (core.Object, error) {
 	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode(rawObject, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	return obj, nil
+	coreObj, ok := obj.(core.Object)
+	if !ok {
+		return nil, errors.New("unable to cast to core.Object")
+	}
+	return coreObj, nil
 }
 
 func castArray(in []interface{}) []interface{} {
@@ -132,7 +138,7 @@ func castValue(v interface{}) interface{} {
 }
 
 // Parse the rendered data into an Unstructured.
-func parseUnstructured(rawObject []byte) (runtime.Object, error) {
+func parseUnstructured(rawObject []byte) (core.Object, error) {
 	data := map[interface{}]interface{}{}
 	err := yaml.Unmarshal(rawObject, data)
 	if err != nil {
@@ -141,7 +147,7 @@ func parseUnstructured(rawObject []byte) (runtime.Object, error) {
 	return &unstructured.Unstructured{Object: castMap(data)}, nil
 }
 
-func Get(fs http.FileSystem, filename string, unstructured bool, data interface{}) (runtime.Object, error) {
+func Get(fs http.FileSystem, filename string, unstructured bool, data interface{}) (core.Object, error) {
 	tmpl, err := parseTemplate(fs, filename)
 	if err != nil {
 		return nil, err
@@ -150,7 +156,7 @@ func Get(fs http.FileSystem, filename string, unstructured bool, data interface{
 	if err != nil {
 		return nil, err
 	}
-	var obj runtime.Object
+	var obj core.Object
 	if unstructured {
 		obj, err = parseUnstructured(out)
 	} else {

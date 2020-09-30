@@ -23,7 +23,6 @@ import (
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/coderanger/controller-utils/conditions"
 )
@@ -32,7 +31,7 @@ type ConditionsObject interface {
 	GetConditions() *[]conditions.Condition
 }
 
-func GetConditionsFor(obj runtime.Object) (*[]conditions.Condition, error) {
+func GetConditionsFor(obj Object) (*[]conditions.Condition, error) {
 	// Try the simple and correct way.
 	condObj, ok := obj.(ConditionsObject)
 	if ok {
@@ -57,11 +56,11 @@ func GetConditionsFor(obj runtime.Object) (*[]conditions.Condition, error) {
 }
 
 type conditionsHelper struct {
-	obj               runtime.Object
+	obj               Object
 	pendingConditions map[string]*conditions.Condition
 }
 
-func NewConditionsHelper(obj runtime.Object) *conditionsHelper {
+func NewConditionsHelper(obj Object) *conditionsHelper {
 	return &conditionsHelper{
 		obj:               obj,
 		pendingConditions: map[string]*conditions.Condition{},
@@ -82,15 +81,20 @@ func (h *conditionsHelper) Flush() error {
 	return nil
 }
 
-func (h *conditionsHelper) Set(conditionType string, status metav1.ConditionStatus, reason string, message ...string) {
-	metaObj := h.obj.(metav1.Object)
-	h.pendingConditions[conditionType] = &conditions.Condition{
-		Type:               conditionType,
-		Status:             status,
-		ObservedGeneration: metaObj.GetGeneration(),
-		Reason:             reason,
-		Message:            strings.Join(message, ""),
+func (h *conditionsHelper) SetCondition(cond *conditions.Condition) {
+	if cond.ObservedGeneration == 0 {
+		cond.ObservedGeneration = h.obj.GetGeneration()
 	}
+	h.pendingConditions[cond.Type] = cond
+}
+
+func (h *conditionsHelper) Set(conditionType string, status metav1.ConditionStatus, reason string, message ...string) {
+	h.SetCondition(&conditions.Condition{
+		Type:    conditionType,
+		Status:  status,
+		Reason:  reason,
+		Message: strings.Join(message, ""),
+	})
 }
 
 func (h *conditionsHelper) Setf(conditionType string, status metav1.ConditionStatus, reason string, message string, args ...interface{}) {

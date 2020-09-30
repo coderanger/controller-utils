@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ .Object.Name }}-webserver
+  annotations:
+    controller-utils/condition: Available
 spec:
   replicas: 0
   selector:
