@@ -78,5 +78,13 @@ var _ = Describe("Templates", func() {
 			Expect(obj.GetName()).To(Equal("test"))
 			Expect(obj.GetNamespace()).To(Equal("default"))
 		})
+
+		It("handles an empty template", func() {
+			rawObject, err := templates.Get(testTemplates, "empty.yml", true, nil)
+			Expect(err).ToNot(HaveOccurred())
+			obj, ok := rawObject.(*unstructured.Unstructured)
+			Expect(ok).To(BeTrue())
+			Expect(obj.UnstructuredContent()).To(HaveLen(0))
+		})
 	})
 })

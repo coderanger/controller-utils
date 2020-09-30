@@ -36,7 +36,7 @@ var _ = Describe("FilteredFileSystem", func() {
 			Expect(err).ToNot(HaveOccurred())
 			fis, err := f.Readdir(0)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(fis).To(HaveLen(5))
+			Expect(fis).To(HaveLen(6))
 		})
 
 		It("can read test.txt", func() {
@@ -58,7 +58,7 @@ var _ = Describe("FilteredFileSystem", func() {
 			Expect(err).ToNot(HaveOccurred())
 			fis, err := f.Readdir(0)
 			Expect(err).ToNot(HaveOccurred())
-			Expect(fis).To(HaveLen(4))
+			Expect(fis).To(HaveLen(5))
 		})
 
 		It("cannot read test.txt", func() {
