@@ -17,6 +17,7 @@ limitations under the License.
 package controllerutils
 
 import (
+	_ "github.com/coderanger/controller-utils/components"
 	"github.com/coderanger/controller-utils/core"
 	"github.com/coderanger/controller-utils/tests"
 )
