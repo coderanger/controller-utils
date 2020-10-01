@@ -43,9 +43,10 @@ type schemeAdder func(*runtime.Scheme) error
 type managerAdder func(ctrl.Manager) error
 
 type functionalBuilder struct {
-	crdPaths []string
-	crds     []runtime.Object
-	apis     []schemeAdder
+	crdPaths     []string
+	crds         []runtime.Object
+	webhookPaths []string
+	apis         []schemeAdder
 }
 
 type FunctionalSuiteHelper struct {
@@ -76,6 +77,11 @@ func (b *functionalBuilder) CRD(crd *apiextv1beta1.CustomResourceDefinition) *fu
 	return b
 }
 
+func (b *functionalBuilder) WebhookPaths(path string) *functionalBuilder {
+	b.webhookPaths = append(b.webhookPaths, path)
+	return b
+}
+
 func (b *functionalBuilder) API(adder schemeAdder) *functionalBuilder {
 	b.apis = append(b.apis, adder)
 	return b
@@ -87,6 +93,9 @@ func (b *functionalBuilder) Build() (*FunctionalSuiteHelper, error) {
 	helper.environment = &envtest.Environment{
 		CRDDirectoryPaths: b.crdPaths,
 		CRDs:              b.crds,
+		WebhookInstallOptions: envtest.WebhookInstallOptions{
+			DirectoryPaths: b.webhookPaths,
+		},
 	}
 
 	// Initialze the RNG.
