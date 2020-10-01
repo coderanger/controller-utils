@@ -18,7 +18,6 @@ package tests
 
 import (
 	"context"
-	"encoding/hex"
 	"math/rand"
 	"time"
 
@@ -36,6 +35,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+
+	"github.com/coderanger/controller-utils/randstring"
 )
 
 type schemeAdder func(*runtime.Scheme) error
@@ -133,10 +134,14 @@ func (fsh *FunctionalSuiteHelper) MustStop() {
 func (fsh *FunctionalSuiteHelper) Start(controllers ...managerAdder) (*FunctionalHelper, error) {
 	fh := &FunctionalHelper{}
 
+	// Pick a randomize namespace so tests don't cross-talk as much.
+	fh.Namespace = "test-" + randstring.MustRandomString(10)
+
 	mgr, err := manager.New(fsh.cfg, manager.Options{
 		// Disable both listeners so tests don't raise a "Do you want to allow ... to listen" dialog on macOS.
 		MetricsBindAddress:     "0",
 		HealthProbeBindAddress: "0",
+		Namespace:              fh.Namespace,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating manager")
@@ -168,19 +173,15 @@ func (fsh *FunctionalSuiteHelper) Start(controllers ...managerAdder) (*Functiona
 		return nil, errors.Wrap(err, "error creating raw client")
 	}
 
-	// Create a random namespace to work in.
-	namespaceNameBytes := make([]byte, 10)
-	rand.Read(namespaceNameBytes)
-	namespaceName := "test-" + hex.EncodeToString(namespaceNameBytes)
-	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespaceName}}
+	// Create the actual random namespace.
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: fh.Namespace}}
 	err = fh.UncachedClient.Create(context.Background(), namespace)
 	if err != nil {
-		return nil, errors.Wrapf(err, "error creating test namespace %s", namespaceName)
+		return nil, errors.Wrapf(err, "error creating test namespace %s", fh.Namespace)
 	}
-	fh.Namespace = namespaceName
 
 	// Create a namespace-bound test client.
-	fh.TestClient = &testClient{client: fh.Client, namespace: namespaceName}
+	fh.TestClient = &testClient{client: fh.Client, namespace: fh.Namespace}
 
 	return fh, nil
 }
