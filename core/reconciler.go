@@ -143,6 +143,16 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 	r.name = name
 	r.log = ctrl.Log.WithName("controllers").WithName(name)
 
+	// Check if we have more than component with the same name.
+	compMap := map[string]Component{}
+	for _, rc := range r.components {
+		first, ok := compMap[rc.name]
+		if ok {
+			return nil, errors.Errorf("found duplicate component using name %s: %#v %#v", rc.name, first, rc.comp)
+		}
+		compMap[rc.name] = rc.comp
+	}
+
 	setupCtx := &Context{
 		Context:        context.Background(),
 		Client:         r.client,
