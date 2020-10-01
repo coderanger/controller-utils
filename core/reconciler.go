@@ -105,14 +105,14 @@ func (r *Reconciler) TemplateComponent(template string, conditionType string) *R
 	return r.Component(name, NewTemplateComponent(template, conditionType))
 }
 
-func (r *Reconciler) RandomSecretComponent(name string, keys ...string) *Reconciler {
+func (r *Reconciler) RandomSecretComponent(keys ...string) *Reconciler {
 	// TODO This is super awkward. Maybe just provisionally set r.name from For()?
 	controllerName, err := r.getControllerName()
 	if err != nil {
 		panic(err)
 	}
-	nameTemplate := fmt.Sprintf("%%s-%s-%s", controllerName, name)
-	return r.Component(name, NewRandomSecretComponent(nameTemplate, keys...))
+	nameTemplate := fmt.Sprintf("%%s-%s", controllerName)
+	return r.Component("randomSecret", NewRandomSecretComponent(nameTemplate, keys...))
 }
 
 func (r *Reconciler) ReadyStatusComponent(keys ...string) *Reconciler {
