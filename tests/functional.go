@@ -94,8 +94,10 @@ func (b *functionalBuilder) Build() (*FunctionalSuiteHelper, error) {
 	if len(b.crdPaths) == 0 {
 		b.crdPaths = append(b.crdPaths, filepath.Join("..", "config", "crd", "bases"))
 	}
+	var defaultWebhookPaths bool
 	if len(b.webhookPaths) == 0 {
 		b.webhookPaths = append(b.webhookPaths, filepath.Join("..", "config", "webhook"))
+		defaultWebhookPaths = true
 	}
 
 	// Configure the test environment.
@@ -103,7 +105,8 @@ func (b *functionalBuilder) Build() (*FunctionalSuiteHelper, error) {
 		CRDDirectoryPaths: b.crdPaths,
 		CRDs:              b.crds,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			DirectoryPaths: b.webhookPaths,
+			DirectoryPaths:           b.webhookPaths,
+			IgnoreErrorIfPathMissing: defaultWebhookPaths,
 		},
 	}
 
@@ -160,6 +163,10 @@ func (fsh *FunctionalSuiteHelper) Start(controllers ...managerAdder) (*Functiona
 		MetricsBindAddress:     "0",
 		HealthProbeBindAddress: "0",
 		Namespace:              fh.Namespace,
+		Host:                   fsh.environment.WebhookInstallOptions.LocalServingHost,
+		Port:                   fsh.environment.WebhookInstallOptions.LocalServingPort,
+		CertDir:                fsh.environment.WebhookInstallOptions.LocalServingCertDir,
+		LeaderElection:         false,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating manager")
