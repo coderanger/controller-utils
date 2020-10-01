@@ -19,6 +19,7 @@ package tests
 import (
 	"context"
 	"math/rand"
+	"path/filepath"
 	"time"
 
 	"github.com/onsi/gomega"
@@ -89,6 +90,14 @@ func (b *functionalBuilder) API(adder schemeAdder) *functionalBuilder {
 
 func (b *functionalBuilder) Build() (*FunctionalSuiteHelper, error) {
 	helper := &FunctionalSuiteHelper{}
+	// Set up default paths for standard kubebuilder usage.
+	if len(b.crdPaths) == 0 {
+		b.crdPaths = append(b.crdPaths, filepath.Join("..", "config", "crd", "bases"))
+	}
+	if len(b.webhookPaths) == 0 {
+		b.webhookPaths = append(b.webhookPaths, filepath.Join("..", "config", "webhook"))
+	}
+
 	// Configure the test environment.
 	helper.environment = &envtest.Environment{
 		CRDDirectoryPaths: b.crdPaths,
