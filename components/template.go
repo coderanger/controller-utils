@@ -69,14 +69,19 @@ func (comp *templateComponent) Reconcile(ctx *core.Context) (core.Result, error)
 	}
 
 	// Default the namespace to the controlling object namespace.
-	metaObj := obj.(metav1.Object)
-	if metaObj.GetNamespace() == "" {
-		metaObj.SetNamespace(ctx.Object.(metav1.Object).GetNamespace())
+	if obj.GetNamespace() == "" {
+		obj.SetNamespace(ctx.Object.(metav1.Object).GetNamespace())
 	}
 
 	// Check for delete annotation.
-	annotations := metaObj.GetAnnotations()
-	if val, ok := annotations[DELETE_ANNOTATION]; ok && val == "true" {
+	annotations := obj.GetAnnotations()
+	shouldDelete, ok := annotations[DELETE_ANNOTATION]
+	if ok {
+		delete(annotations, DELETE_ANNOTATION)
+		obj.SetAnnotations(annotations)
+	}
+
+	if ok && shouldDelete == "true" {
 		return comp.reconcileDelete(ctx, obj)
 	} else {
 		return comp.reconcileCreate(ctx, obj)
@@ -111,6 +116,9 @@ func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Objec
 
 		annotations := obj.GetAnnotations()
 		if val, ok := annotations[CONDITION_ANNOTATION]; ok {
+			// Don't let the annotation propagate to Kubernetes.
+			delete(annotations, CONDITION_ANNOTATION)
+			obj.SetAnnotations(annotations)
 			status, ok := comp.getStatusFromUnstructured(currentObj, val)
 			if ok {
 				ctx.Conditions.Setf(comp.conditionType, status, "UpstreamConditionSet", "Upstream condition %s on %s %s was set to %s", val, obj.GroupVersionKind().Kind, obj.GetName(), status)

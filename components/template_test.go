@@ -122,6 +122,7 @@ var _ = Describe("Template component", func() {
 
 		deployment := &appsv1.Deployment{}
 		c.GetName("testing-webserver", deployment)
+		Expect(deployment.GetAnnotations()).ToNot(HaveKey(DELETE_ANNOTATION))
 		deploymentClean := deployment.DeepCopy()
 		deployment.Status.Conditions = []appsv1.DeploymentCondition{
 			{
