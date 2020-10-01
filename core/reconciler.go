@@ -56,6 +56,7 @@ type Reconciler struct {
 	uncachedClient    client.Client
 	templates         http.FileSystem
 	events            record.EventRecorder
+	webhook           bool
 }
 
 // Concrete component instance.
@@ -86,6 +87,11 @@ func (r *Reconciler) For(apiType runtime.Object) *Reconciler {
 
 func (r *Reconciler) Templates(t http.FileSystem) *Reconciler {
 	r.templates = t
+	return r
+}
+
+func (r *Reconciler) Webhook() *Reconciler {
+	r.webhook = true
 	return r
 }
 
@@ -168,6 +174,13 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 	}
 	r.controller = controller
 	r.events = r.mgr.GetEventRecorderFor(r.name + "-controller")
+	// If requested, set up a webhook runable too.
+	if r.webhook {
+		err := ctrl.NewWebhookManagedBy(r.mgr).For(r.apiType).Complete()
+		if err != nil {
+			return nil, errors.Wrap(err, "error initializing webhook")
+		}
+	}
 	return controller, nil
 }
 

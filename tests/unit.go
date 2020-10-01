@@ -28,6 +28,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/coderanger/controller-utils/core"
 )
@@ -126,6 +127,10 @@ func (ush *UnitSuiteHelper) Setup(comp core.Component, obj core.Object) *UnitHel
 }
 
 func (uh *UnitHelper) Reconcile() (core.Result, error) {
+	defaulter, ok := uh.Object.(admission.Defaulter)
+	if ok {
+		defaulter.Default()
+	}
 	uh.TestClient.Update(uh.Object)
 	res, err := uh.Comp.Reconcile(uh.Ctx)
 	compErr := uh.Ctx.Conditions.Flush()
