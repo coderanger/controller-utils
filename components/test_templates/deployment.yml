@@ -4,6 +4,7 @@ metadata:
   name: {{ .Object.Name }}-webserver
   annotations:
     controller-utils/condition: Available
+    controller-utils/delete: {{ .Object.Spec.Field | default "false" | quote }}
 spec:
   replicas: 0
   selector:

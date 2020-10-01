@@ -17,13 +17,17 @@ limitations under the License.
 package components
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	. "github.com/onsi/gomega/gstruct"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/coderanger/controller-utils/tests"
@@ -31,7 +35,7 @@ import (
 
 var _ = Describe("Template component", func() {
 	var helper *tests.FunctionalHelper
-	var obj runtime.Object
+	var obj *TestObject
 
 	BeforeEach(func() {
 		obj = &TestObject{
@@ -136,5 +140,49 @@ var _ = Describe("Template component", func() {
 		c.Status().Patch(deployment, client.MergeFrom(deploymentClean))
 
 		c.EventuallyGetName("testing", obj, c.EventuallyCondition("DeploymentAvailable", "True"))
+	})
+
+	It("deletes an object", func() {
+		comp := NewTemplateComponent("deployment.yml", "DeploymentAvailable")
+		helper = startTestController(comp)
+		c := helper.TestClient
+
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testing-webserver",
+			},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "webserver",
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": "webserver",
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "default",
+								Image: "something",
+							},
+						},
+					},
+				},
+			},
+		}
+		c.Create(deployment)
+
+		obj.Spec.Field = "true"
+		c.Create(obj)
+
+		c.EventuallyGetName("testing", obj, c.EventuallyCondition("DeploymentAvailable", "True"))
+
+		err := helper.Client.Get(context.Background(), types.NamespacedName{Name: "testing-webserver", Namespace: helper.Namespace}, deployment)
+		Expect(err).To(HaveOccurred())
+		Expect(kerrors.IsNotFound(err)).To(BeTrue())
 	})
 })
