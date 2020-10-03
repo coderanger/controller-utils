@@ -155,7 +155,11 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 
 	// Work out a default finalizer base name.
 	if r.finalizerBaseName == "" {
-		r.finalizerBaseName = fmt.Sprintf("%s.%s/", name, r.apiType.GetObjectKind().GroupVersionKind().Group)
+		gvk, err := apiutil.GVKForObject(r.apiType, r.mgr.GetScheme())
+		if err != nil {
+			return nil, errors.Wrapf(err, "error getting GVK for object %#v", r.apiType)
+		}
+		r.finalizerBaseName = fmt.Sprintf("%s.%s/", name, gvk.Group)
 	}
 
 	// Check if we have more than component with the same name.
@@ -236,7 +240,7 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 	ctx.Object = obj.(Object)
 	ctx.Conditions = NewConditionsHelper(ctx.Object)
-	cleanObj := obj.DeepCopyObject()
+	cleanObj := obj.DeepCopyObject().(Object)
 
 	// Check for annotation that blocks reconciles, exit early if found.
 	annotations := ctx.Object.GetAnnotations()
@@ -249,15 +253,16 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	// Reconcile the components.
 	compLog := log.WithName("components")
 	for _, rc := range r.components {
-		log.V(1).Info("Reconciling component", "component", rc.name)
 		// Create the per-component logger.
 		ctx.Log = compLog.WithName(rc.name)
 		ctx.FieldManager = fmt.Sprintf("%s/%s", r.name, rc.name)
 		isAlive := ctx.Object.GetDeletionTimestamp() == nil
 		var res Result
 		if isAlive {
+			log.V(1).Info("Reconciling component", "component", rc.name)
 			res, err = rc.comp.Reconcile(ctx)
 		} else if rc.finalizer != nil && controllerutil.ContainsFinalizer(ctx.Object, rc.finalizerName) {
+			log.V(1).Info("Finalizing component", "component", rc.name)
 			var done bool
 			res, done, err = rc.finalizer.Finalize(ctx)
 			if done {
@@ -277,6 +282,25 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			log.V(1).Info("Skipping remaining components")
 			break
 		}
+	}
+
+	// Check if we need to patch metadata, only looking at labels, annotations, and finalizers.
+	currentMeta := r.apiType.DeepCopyObject().(Object)
+	currentMeta.SetName(ctx.Object.GetName())
+	currentMeta.SetNamespace(ctx.Object.GetNamespace())
+	currentMeta.SetLabels(ctx.Object.GetLabels())
+	currentMeta.SetAnnotations(ctx.Object.GetAnnotations())
+	currentMeta.SetFinalizers(ctx.Object.GetFinalizers())
+	cleanMeta := r.apiType.DeepCopyObject().(Object)
+	cleanMeta.SetName(cleanObj.GetName())
+	cleanMeta.SetNamespace(cleanObj.GetNamespace())
+	cleanMeta.SetLabels(cleanObj.GetLabels())
+	cleanMeta.SetAnnotations(cleanObj.GetAnnotations())
+	cleanMeta.SetFinalizers(cleanObj.GetFinalizers())
+	err = r.client.Patch(ctx, currentMeta, client.MergeFrom(cleanMeta), &client.PatchOptions{FieldManager: r.name})
+	if err != nil && !kerrors.IsNotFound(err) {
+		// If it was a NotFound error, the object was probably already deleted so just ignore the error and return the existing result.
+		return ctx.result, errors.Wrap(err, "error patching metadata")
 	}
 
 	// Save the object status.
