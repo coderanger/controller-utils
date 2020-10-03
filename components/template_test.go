@@ -30,8 +30,21 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/coderanger/controller-utils/core"
 	"github.com/coderanger/controller-utils/tests"
 )
+
+type injectDataComponent struct {
+	key   string
+	value string
+}
+
+func (comp *injectDataComponent) Reconcile(ctx *core.Context) (core.Result, error) {
+	ctx.Data[comp.key] = comp.value
+	return core.Result{}, nil
+}
+
+var _ core.Component = &injectDataComponent{}
 
 var _ = Describe("Template component", func() {
 	var helper *tests.FunctionalHelper
@@ -185,5 +198,18 @@ var _ = Describe("Template component", func() {
 		err := helper.Client.Get(context.Background(), types.NamespacedName{Name: "testing-webserver", Namespace: helper.Namespace}, deployment)
 		Expect(err).To(HaveOccurred())
 		Expect(kerrors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("handles template data", func() {
+		dataComp := &injectDataComponent{key: "FOO", value: "bar"}
+		comp := NewTemplateComponent("configmap.yml", "")
+		helper = startTestController(dataComp, comp)
+		c := helper.TestClient
+
+		c.Create(obj)
+
+		cmap := &corev1.ConfigMap{}
+		c.EventuallyGetName("testing", cmap)
+		Expect(cmap.Data).To(HaveKeyWithValue("FOO", Equal("bar")))
 	})
 })

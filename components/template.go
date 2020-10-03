@@ -41,6 +41,7 @@ type templateComponent struct {
 
 type templateData struct {
 	Object core.Object
+	Data   map[string]interface{}
 }
 
 func NewTemplateComponent(template string, conditionType string) core.Component {
@@ -89,7 +90,7 @@ func (comp *templateComponent) Reconcile(ctx *core.Context) (core.Result, error)
 }
 
 func (comp *templateComponent) renderTemplate(ctx *core.Context, unstructured bool) (core.Object, error) {
-	return templates.Get(ctx.Templates, comp.template, unstructured, templateData{Object: ctx.Object})
+	return templates.Get(ctx.Templates, comp.template, unstructured, templateData{Object: ctx.Object, Data: ctx.Data})
 }
 
 func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Object) (core.Result, error) {
