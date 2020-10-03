@@ -116,9 +116,6 @@ func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Objec
 
 		annotations := obj.GetAnnotations()
 		if val, ok := annotations[CONDITION_ANNOTATION]; ok {
-			// Don't let the annotation propagate to Kubernetes.
-			delete(annotations, CONDITION_ANNOTATION)
-			obj.SetAnnotations(annotations)
 			status, ok := comp.getStatusFromUnstructured(currentObj, val)
 			if ok {
 				ctx.Conditions.Setf(comp.conditionType, status, "UpstreamConditionSet", "Upstream condition %s on %s %s was set to %s", val, obj.GroupVersionKind().Kind, obj.GetName(), status)
