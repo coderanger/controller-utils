@@ -20,13 +20,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 // An object that implements all the main object APIs, to avoid needing to cast so much.
 // Idea borrowed from controller-runtime, but with ObjectKind added too.
-// TODO Add controllerutil.Object once I upgrade to c-r 0.6 so it works for those helpers too.
 type Object interface {
 	metav1.Object
 	runtime.Object
 	schema.ObjectKind
+	controllerutil.Object
 }
