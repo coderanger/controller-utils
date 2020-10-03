@@ -145,3 +145,27 @@ func (uh *UnitHelper) MustReconcile() core.Result {
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	return res
 }
+
+func (uh *UnitHelper) Finalize() (core.Result, bool, error) {
+	finalizer, ok := uh.Comp.(core.FinalizerComponent)
+	if !ok {
+		return core.Result{}, false, errors.New("component is not a finalizer")
+	}
+	defaulter, ok := uh.Object.(admission.Defaulter)
+	if ok {
+		defaulter.Default()
+	}
+	uh.TestClient.Update(uh.Object)
+	res, done, err := finalizer.Finalize(uh.Ctx)
+	compErr := uh.Ctx.Conditions.Flush()
+	if compErr != nil && err == nil {
+		err = compErr
+	}
+	return res, done, err
+}
+
+func (uh *UnitHelper) MustFinalize() (core.Result, bool) {
+	res, done, err := uh.Finalize()
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	return res, done
+}
