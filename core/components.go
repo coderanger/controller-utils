@@ -26,8 +26,12 @@ type Component interface {
 	Reconcile(*Context) (Result, error)
 }
 
-type ComponentSetup interface {
+type InitializerComponent interface {
 	Setup(*Context, *ctrl.Builder) error
+}
+
+type FinalizerComponent interface {
+	Finalize(*Context) (Result, bool, error)
 }
 
 type Result struct {

@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -50,19 +51,23 @@ type Reconciler struct {
 	controllerBuilder *ctrl.Builder
 	controller        controller.Controller
 	apiType           runtime.Object
-	components        []reconcilerComponent
+	components        []*reconcilerComponent
 	log               logr.Logger
 	client            client.Client
 	uncachedClient    client.Client
 	templates         http.FileSystem
 	events            record.EventRecorder
 	webhook           bool
+	finalizerBaseName string
 }
 
 // Concrete component instance.
 type reconcilerComponent struct {
 	name string
 	comp Component
+	// Same component as comp but as a finalizer if possible, otherwise nil.
+	finalizer     FinalizerComponent
+	finalizerName string
 }
 
 func NewReconciler(mgr ctrl.Manager) *Reconciler {
@@ -73,7 +78,7 @@ func NewReconciler(mgr ctrl.Manager) *Reconciler {
 	return &Reconciler{
 		mgr:               mgr,
 		controllerBuilder: builder.ControllerManagedBy(mgr),
-		components:        []reconcilerComponent{},
+		components:        []*reconcilerComponent{},
 		client:            mgr.GetClient(),
 		uncachedClient:    rawClient,
 	}
@@ -96,7 +101,12 @@ func (r *Reconciler) Webhook() *Reconciler {
 }
 
 func (r *Reconciler) Component(name string, comp Component) *Reconciler {
-	r.components = append(r.components, reconcilerComponent{name: name, comp: comp})
+	rc := &reconcilerComponent{name: name, comp: comp}
+	finalizer, ok := comp.(FinalizerComponent)
+	if ok {
+		rc.finalizer = finalizer
+	}
+	r.components = append(r.components, rc)
 	return r
 }
 
@@ -143,6 +153,11 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 	r.name = name
 	r.log = ctrl.Log.WithName("controllers").WithName(name)
 
+	// Work out a default finalizer base name.
+	if r.finalizerBaseName == "" {
+		r.finalizerBaseName = fmt.Sprintf("%s.%s/", name, r.apiType.GetObjectKind().GroupVersionKind().Group)
+	}
+
 	// Check if we have more than component with the same name.
 	compMap := map[string]Component{}
 	for _, rc := range r.components {
@@ -167,7 +182,8 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 	setupObj.SetNamespace("setup")
 	log := r.log.WithName("components")
 	for _, rc := range r.components {
-		setupComp, ok := rc.comp.(ComponentSetup)
+		rc.finalizerName = r.finalizerBaseName + rc.name
+		setupComp, ok := rc.comp.(InitializerComponent)
 		if !ok {
 			continue
 		}
@@ -237,11 +253,24 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		// Create the per-component logger.
 		ctx.Log = compLog.WithName(rc.name)
 		ctx.FieldManager = fmt.Sprintf("%s/%s", r.name, rc.name)
-		res, err := rc.comp.Reconcile(ctx)
+		isAlive := ctx.Object.GetDeletionTimestamp() == nil
+		var res Result
+		if isAlive {
+			res, err = rc.comp.Reconcile(ctx)
+		} else if rc.finalizer != nil && controllerutil.ContainsFinalizer(ctx.Object, rc.finalizerName) {
+			var done bool
+			res, done, err = rc.finalizer.Finalize(ctx)
+			if done {
+				controllerutil.RemoveFinalizer(ctx.Object, rc.finalizerName)
+			}
+		}
 		err = ctx.mergeResult(res, err)
 		if err != nil {
 			log.Error(err, "error in component reconcile", "component", rc.name)
 			return ctx.result, errors.Wrapf(err, "error in %s component reconcile", rc.name)
+		}
+		if isAlive && rc.finalizer != nil {
+			controllerutil.AddFinalizer(ctx.Object, rc.finalizerName)
 		}
 		if res.SkipRemaining {
 			// Abort reconcile to skip remaining components.
