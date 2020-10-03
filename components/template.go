@@ -119,9 +119,9 @@ func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Objec
 		if val, ok := annotations[CONDITION_ANNOTATION]; ok {
 			status, ok := comp.getStatusFromUnstructured(currentObj, val)
 			if ok {
-				ctx.Conditions.Setf(comp.conditionType, status, "UpstreamConditionSet", "Upstream condition %s on %s %s was set to %s", val, obj.GroupVersionKind().Kind, obj.GetName(), status)
+				ctx.Conditions.Setf(comp.conditionType, status, "UpstreamConditionSet", "Upstream condition %s on %s %s was set to %s", val, obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), status)
 			} else {
-				ctx.Conditions.SetfUnknown(comp.conditionType, "UpstreamConditionNotSet", "Upstream condition %s on %s %s was not set", val, obj.GroupVersionKind().Kind, obj.GetName())
+				ctx.Conditions.SetfUnknown(comp.conditionType, "UpstreamConditionNotSet", "Upstream condition %s on %s %s was not set", val, obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 			}
 		}
 		// TODO some kind of support for an expr or CEL based option to get a status for upstream objects that don't use status conditions.
@@ -137,7 +137,7 @@ func (comp *templateComponent) reconcileDelete(ctx *core.Context, obj core.Objec
 		return core.Result{}, errors.Wrapf(err, "error deleting %s/%s", obj.GetNamespace(), obj.GetName())
 	}
 	if comp.conditionType != "" {
-		ctx.Conditions.SetfTrue(comp.conditionType, "UpstreamDoesNotExist", "Upstream %s %s does not exist", obj.GroupVersionKind().Kind, obj.GetName())
+		ctx.Conditions.SetfTrue(comp.conditionType, "UpstreamDoesNotExist", "Upstream %s %s does not exist", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
 	}
 	return core.Result{}, nil
 }

@@ -19,7 +19,6 @@ package core
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
@@ -28,6 +27,5 @@ import (
 type Object interface {
 	metav1.Object
 	runtime.Object
-	schema.ObjectKind
 	controllerutil.Object
 }
