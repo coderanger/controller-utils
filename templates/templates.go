@@ -37,6 +37,10 @@ import (
 )
 
 func parseTemplate(fs http.FileSystem, filename string) (*template.Template, error) {
+	if fs == nil {
+		return nil, errors.New("template filesystem not set")
+	}
+
 	// Wrote this because if statements with pointers don't work how you'd think they would
 	customFuncMap := template.FuncMap{
 		"deref": func(input interface{}) interface{} {
