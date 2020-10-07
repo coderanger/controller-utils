@@ -292,10 +292,9 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			// Mark the status condition for this component as bad.
 			ctx.Conditions.Set(rc.readyCondition, rc.errorConditionStatus, "Error", err.Error())
 		}
-		err = ctx.mergeResult(rc.name, res, err)
+		ctx.mergeResult(rc.name, res, err)
 		if err != nil {
 			log.Error(err, "error in component reconcile", "component", rc.name)
-			break
 		}
 		if res.SkipRemaining {
 			// Abort reconcile to skip remaining components.
@@ -330,5 +329,20 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctx.result, errors.Wrap(err, "error patching status")
 	}
 
-	return ctx.result, ctx.err
+	// Build up the final error to be logged.
+	err = nil
+	if len(ctx.errors) == 1 {
+		err = ctx.errors[0]
+	} else if len(ctx.errors) > 1 {
+		msg := strings.Builder{}
+		msg.WriteString("Multiple errors:\n")
+		for _, e := range ctx.errors {
+			msg.WriteString("  ")
+			msg.WriteString(e.Error())
+			msg.WriteString("\n")
+		}
+		err = errors.New(msg.String())
+	}
+
+	return ctx.result, err
 }

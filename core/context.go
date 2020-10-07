@@ -38,8 +38,8 @@ type Context struct {
 	Log            logr.Logger
 	// Pending result at the end of things.
 	result ctrl.Result
-	// Most recent component error, if any.
-	err error
+	// Errors from components.
+	errors []error
 	// Templates filesystem, mostly used through helpers but accessible directly too.
 	Templates http.FileSystem
 	// Name to use as the field manager with Apply.
@@ -54,14 +54,13 @@ type Context struct {
 	Conditions *conditionsHelper
 }
 
-func (c *Context) mergeResult(name string, componentResult Result, err error) error {
+func (c *Context) mergeResult(name string, componentResult Result, err error) {
 	condErr := c.Conditions.Flush()
-	if condErr != nil && err == nil {
-		err = condErr
+	if condErr != nil {
+		c.errors = append(c.errors, errors.Wrapf(err, "error in %s component condition flush", name))
 	}
-
 	if err != nil {
-		c.err = errors.Wrapf(err, "error in %s component reconcile", name)
+		c.errors = append(c.errors, errors.Wrapf(err, "error in %s component reconcile", name))
 	}
 	if componentResult.Requeue {
 		c.result.Requeue = true
@@ -69,8 +68,6 @@ func (c *Context) mergeResult(name string, componentResult Result, err error) er
 	if componentResult.RequeueAfter != 0 && (c.result.RequeueAfter == 0 || c.result.RequeueAfter > componentResult.RequeueAfter) {
 		c.result.RequeueAfter = componentResult.RequeueAfter
 	}
-
-	return c.err
 }
 
 func (d ContextData) GetString(key string) (string, bool) {
