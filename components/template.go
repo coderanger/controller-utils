@@ -22,9 +22,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/coderanger/controller-utils/core"
@@ -109,7 +111,8 @@ func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Objec
 
 	// If we have a condition setter, check on the object status.
 	if comp.conditionType != "" {
-		currentObj := obj.DeepCopyObject()
+		currentObj := &unstructured.Unstructured{}
+		currentObj.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
 		err = ctx.Client.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, currentObj)
 		if err != nil {
 			return core.Result{}, errors.Wrapf(err, "error getting current object %s/%s for status", obj.GetNamespace(), obj.GetName())
@@ -131,8 +134,23 @@ func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Objec
 }
 
 func (comp *templateComponent) reconcileDelete(ctx *core.Context, obj core.Object) (core.Result, error) {
+	currentObj := &unstructured.Unstructured{}
+	currentObj.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
+	err := ctx.Client.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, currentObj)
+	if err != nil {
+		return core.Result{}, errors.Wrapf(err, "error getting current object %s/%s for owner", obj.GetNamespace(), obj.GetName())
+	}
+	controllerRef := metav1.GetControllerOf(currentObj)
+	if controllerRef == nil || !comp.referSameObject(controllerRef, ctx.Object, ctx.Scheme) {
+		// The object exists but isn't owned by this object so don't purge it.
+		if comp.conditionType != "" {
+			ctx.Conditions.SetfTrue(comp.conditionType, "UpstreamNotOwned", "Upstream %s %s is not owned by %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), ctx.Object.GetName())
+		}
+		return core.Result{}, nil
+	}
+
 	propagation := metav1.DeletePropagationBackground
-	err := ctx.Client.Delete(ctx, obj, &client.DeleteOptions{PropagationPolicy: &propagation})
+	err = ctx.Client.Delete(ctx, obj, &client.DeleteOptions{PropagationPolicy: &propagation})
 	if err != nil && !kerrors.IsNotFound(err) {
 		return core.Result{}, errors.Wrapf(err, "error deleting %s/%s", obj.GetNamespace(), obj.GetName())
 	}
@@ -189,6 +207,22 @@ func (comp *templateComponent) getStatusFromUnstructured(obj runtime.Object, src
 
 	// Wasn't in there, we tried.
 	return metav1.ConditionUnknown, false
+}
+
+// Adapted from controller-runtime.
+// Copyright 2018 The Kubernetes Authors.
+func (comp *templateComponent) referSameObject(ownerRef *metav1.OwnerReference, obj core.Object, scheme *runtime.Scheme) bool {
+	ownerGV, err := schema.ParseGroupVersion(ownerRef.APIVersion)
+	if err != nil {
+		return false
+	}
+
+	objGVK, err := apiutil.GVKForObject(obj, scheme)
+	if err != nil {
+		return false
+	}
+
+	return ownerGV.Group == objGVK.Group && ownerRef.Kind == objGVK.Kind && ownerRef.Name == obj.GetName()
 }
 
 func init() {

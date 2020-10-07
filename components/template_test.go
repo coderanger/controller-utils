@@ -161,6 +161,60 @@ var _ = Describe("Template component", func() {
 		helper = startTestController(comp)
 		c := helper.TestClient
 
+		controller := true
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testing-webserver",
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "test.coderanger.net/v1",
+						Kind:       "TestObject",
+						Name:       "testing",
+						Controller: &controller,
+						UID:        "fake", // Not used but must be filled in.
+					},
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "webserver",
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": "webserver",
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "default",
+								Image: "something",
+							},
+						},
+					},
+				},
+			},
+		}
+		c.Create(deployment)
+
+		obj.Spec.Field = "true"
+		c.Create(obj)
+
+		c.EventuallyGetName("testing", obj, c.EventuallyCondition("DeploymentAvailable", "True"))
+
+		err := helper.Client.Get(context.Background(), types.NamespacedName{Name: "testing-webserver", Namespace: helper.Namespace}, deployment)
+		Expect(err).To(HaveOccurred())
+		Expect(kerrors.IsNotFound(err)).To(BeTrue())
+	})
+
+	It("does not delete an unowned object", func() {
+		comp := NewTemplateComponent("deployment.yml", "DeploymentAvailable")
+		helper = startTestController(comp)
+		c := helper.TestClient
+
 		deployment := &appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "testing-webserver",
@@ -196,8 +250,62 @@ var _ = Describe("Template component", func() {
 		c.EventuallyGetName("testing", obj, c.EventuallyCondition("DeploymentAvailable", "True"))
 
 		err := helper.Client.Get(context.Background(), types.NamespacedName{Name: "testing-webserver", Namespace: helper.Namespace}, deployment)
-		Expect(err).To(HaveOccurred())
-		Expect(kerrors.IsNotFound(err)).To(BeTrue())
+		Expect(err).ToNot(HaveOccurred())
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("something"))
+	})
+
+	It("does not delete an object owned by someone else", func() {
+		comp := NewTemplateComponent("deployment.yml", "DeploymentAvailable")
+		helper = startTestController(comp)
+		c := helper.TestClient
+
+		controller := true
+		deployment := &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "testing-webserver",
+				OwnerReferences: []metav1.OwnerReference{
+					{
+						APIVersion: "test.coderanger.net/v1",
+						Kind:       "TestObject",
+						Name:       "testing-other",
+						Controller: &controller,
+						UID:        "fake", // Not used but must be filled in.
+					},
+				},
+			},
+			Spec: appsv1.DeploymentSpec{
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"app": "webserver",
+					},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"app": "webserver",
+						},
+					},
+					Spec: corev1.PodSpec{
+						Containers: []corev1.Container{
+							{
+								Name:  "default",
+								Image: "something",
+							},
+						},
+					},
+				},
+			},
+		}
+		c.Create(deployment)
+
+		obj.Spec.Field = "true"
+		c.Create(obj)
+
+		c.EventuallyGetName("testing", obj, c.EventuallyCondition("DeploymentAvailable", "True"))
+
+		err := helper.Client.Get(context.Background(), types.NamespacedName{Name: "testing-webserver", Namespace: helper.Namespace}, deployment)
+		Expect(err).ToNot(HaveOccurred())
+		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("something"))
 	})
 
 	It("handles template data", func() {
