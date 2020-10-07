@@ -34,6 +34,10 @@ type FinalizerComponent interface {
 	Finalize(*Context) (Result, bool, error)
 }
 
+type ReadyConditionComponent interface {
+	GetReadyCondition() string
+}
+
 type Result struct {
 	Requeue       bool
 	RequeueAfter  time.Duration

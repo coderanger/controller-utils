@@ -48,6 +48,10 @@ func NewTemplateComponent(template string, conditionType string) core.Component 
 	return &templateComponent{template: template, conditionType: conditionType}
 }
 
+func (comp *templateComponent) GetReadyCondition() string {
+	return comp.conditionType
+}
+
 func (comp *templateComponent) Setup(ctx *core.Context, bldr *ctrl.Builder) error {
 	// Render with a fake, blank object just to find the object type.
 	obj, err := comp.renderTemplate(ctx, true)
@@ -59,10 +63,6 @@ func (comp *templateComponent) Setup(ctx *core.Context, bldr *ctrl.Builder) erro
 }
 
 func (comp *templateComponent) Reconcile(ctx *core.Context) (core.Result, error) {
-	if comp.conditionType != "" {
-		ctx.Conditions.SetUnknown(comp.conditionType, "Unknown")
-	}
-
 	// Render the object to an Unstructured.
 	obj, err := comp.renderTemplate(ctx, true)
 	if err != nil {

@@ -48,6 +48,10 @@ func NewReadyStatusComponent(keys ...string) core.Component {
 	return &readyStatusComponent{keys: keys, readyConditions: readyConditions}
 }
 
+func (comp *readyStatusComponent) GetReadyCondition() string {
+	return "Ready"
+}
+
 func (comp *readyStatusComponent) Reconcile(ctx *core.Context) (core.Result, error) {
 	objConditions, err := core.GetConditionsFor(ctx.Object)
 	if err != nil {
