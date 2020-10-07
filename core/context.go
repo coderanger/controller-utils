@@ -21,6 +21,7 @@ import (
 	"net/http"
 
 	"github.com/go-logr/logr"
+	"github.com/pkg/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -53,14 +54,14 @@ type Context struct {
 	Conditions *conditionsHelper
 }
 
-func (c *Context) mergeResult(componentResult Result, err error) error {
+func (c *Context) mergeResult(name string, componentResult Result, err error) error {
 	condErr := c.Conditions.Flush()
 	if condErr != nil && err == nil {
 		err = condErr
 	}
 
 	if err != nil {
-		c.err = err
+		c.err = errors.Wrapf(err, "error in %s component reconcile", name)
 	}
 	if componentResult.Requeue {
 		c.result.Requeue = true

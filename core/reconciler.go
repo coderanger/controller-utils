@@ -111,7 +111,7 @@ func (r *Reconciler) Component(name string, comp Component) *Reconciler {
 }
 
 func (r *Reconciler) TemplateComponent(template string, conditionType string) *Reconciler {
-	name := template[strings.LastIndex(template, ".")+1:]
+	name := template[:strings.LastIndex(template, ".")]
 	return r.Component(name, NewTemplateComponent(template, conditionType))
 }
 
@@ -261,6 +261,9 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		if isAlive {
 			log.V(1).Info("Reconciling component", "component", rc.name)
 			res, err = rc.comp.Reconcile(ctx)
+			if rc.finalizer != nil {
+				controllerutil.AddFinalizer(ctx.Object, rc.finalizerName)
+			}
 		} else if rc.finalizer != nil && controllerutil.ContainsFinalizer(ctx.Object, rc.finalizerName) {
 			log.V(1).Info("Finalizing component", "component", rc.name)
 			var done bool
@@ -269,13 +272,10 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 				controllerutil.RemoveFinalizer(ctx.Object, rc.finalizerName)
 			}
 		}
-		err = ctx.mergeResult(res, err)
+		err = ctx.mergeResult(rc.name, res, err)
 		if err != nil {
 			log.Error(err, "error in component reconcile", "component", rc.name)
-			return ctx.result, errors.Wrapf(err, "error in %s component reconcile", rc.name)
-		}
-		if isAlive && rc.finalizer != nil {
-			controllerutil.AddFinalizer(ctx.Object, rc.finalizerName)
+			break
 		}
 		if res.SkipRemaining {
 			// Abort reconcile to skip remaining components.
@@ -310,5 +310,5 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		return ctx.result, errors.Wrap(err, "error patching status")
 	}
 
-	return ctx.result, nil
+	return ctx.result, ctx.err
 }
