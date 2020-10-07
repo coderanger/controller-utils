@@ -18,8 +18,10 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/onsi/gomega"
@@ -28,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -36,6 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/yaml"
 
 	"github.com/coderanger/controller-utils/randstring"
 )
@@ -231,4 +235,39 @@ func (fh *FunctionalHelper) Stop() error {
 func (fh *FunctionalHelper) MustStop() {
 	err := fh.Stop()
 	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+}
+
+// Helper method to show a list of objects, used in AfterEach helpers.
+func (fh *FunctionalHelper) DebugList(listType runtime.Object) {
+	gvks, unversioned, err := scheme.Scheme.ObjectKinds(listType)
+	if err != nil {
+		fmt.Printf("DebugList Error: %v", err)
+		panic(err)
+	}
+	if unversioned || len(gvks) == 0 {
+		fmt.Println("DebugList Error: Error getting GVKs")
+		panic("Error getting GVKs")
+	}
+	list := &unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(gvks[0])
+
+	err = fh.UncachedClient.List(context.Background(), list)
+	if err != nil {
+		fmt.Printf("DebugList Error: %v", err)
+		panic(err)
+	}
+
+	output := map[string]interface{}{}
+	for _, item := range list.Items {
+		meta := item.Object["metadata"].(map[string]interface{})
+		if meta["namespace"].(string) == fh.Namespace {
+			output[meta["name"].(string)] = item.Object
+		}
+	}
+	outputBytes, err := yaml.Marshal(output)
+	if err != nil {
+		fmt.Printf("DebugList Error: %v", err)
+		panic(err)
+	}
+	fmt.Printf("\n%s\n%s\n%s\n", gvks[0].Kind, strings.Repeat("=", len(gvks[0].Kind)), string(outputBytes))
 }
