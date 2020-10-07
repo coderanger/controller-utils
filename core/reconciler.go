@@ -68,6 +68,9 @@ type reconcilerComponent struct {
 	// Same component as comp but as a finalizer if possible, otherwise nil.
 	finalizer     FinalizerComponent
 	finalizerName string
+	// Tracking data for status conditions.
+	readyCondition       string
+	errorConditionStatus metav1.ConditionStatus
 }
 
 func NewReconciler(mgr ctrl.Manager) *Reconciler {
@@ -105,6 +108,16 @@ func (r *Reconciler) Component(name string, comp Component) *Reconciler {
 	finalizer, ok := comp.(FinalizerComponent)
 	if ok {
 		rc.finalizer = finalizer
+	}
+	readyCond, ok := comp.(ReadyConditionComponent)
+	if ok {
+		rc.readyCondition = readyCond.GetReadyCondition()
+		rc.errorConditionStatus = metav1.ConditionFalse
+		// If the first character is !, trim it off and invert the error status.
+		if rc.readyCondition != "" && rc.readyCondition[0] == '!' {
+			rc.readyCondition = rc.readyCondition[1:]
+			rc.errorConditionStatus = metav1.ConditionTrue
+		}
 	}
 	r.components = append(r.components, rc)
 	return r
@@ -257,6 +270,9 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		ctx.Log = compLog.WithName(rc.name)
 		ctx.FieldManager = fmt.Sprintf("%s/%s", r.name, rc.name)
 		isAlive := ctx.Object.GetDeletionTimestamp() == nil
+		if rc.readyCondition != "" {
+			ctx.Conditions.SetUnknown(rc.readyCondition, "Unknown")
+		}
 		var res Result
 		if isAlive {
 			log.V(1).Info("Reconciling component", "component", rc.name)
@@ -271,6 +287,10 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 			if done {
 				controllerutil.RemoveFinalizer(ctx.Object, rc.finalizerName)
 			}
+		}
+		if err != nil && rc.readyCondition != "" {
+			// Mark the status condition for this component as bad.
+			ctx.Conditions.Set(rc.readyCondition, rc.errorConditionStatus, "Error", err.Error())
 		}
 		err = ctx.mergeResult(rc.name, res, err)
 		if err != nil {
