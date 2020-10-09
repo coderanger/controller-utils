@@ -81,6 +81,7 @@ func (comp *randomSecretComponent) Reconcile(ctx *core.Context) (core.Result, er
 
 	data := map[string][]byte{}
 
+	changed := false
 	for _, key := range comp.keys {
 		val, ok := existingSecret.Data[key]
 		if !ok || len(val) == 0 {
@@ -89,32 +90,35 @@ func (comp *randomSecretComponent) Reconcile(ctx *core.Context) (core.Result, er
 				return core.Result{}, errors.Wrap(err, "error generating random bytes")
 			}
 			ctx.Events.Eventf(ctx.Object, "Normal", "GeneratedRandomValue", "Generated a random value for key %s", key)
+			changed = true
 		}
 		data[key] = val
 		// Store the values into context for use by later components.
 		ctx.Data[key] = string(val)
 	}
 
-	secret := &unstructured.Unstructured{
-		Object: map[string]interface{}{
-			"type": "Opaque",
-			"data": data,
-		},
-	}
-	secret.SetName(secretName.Name)
-	secret.SetNamespace(secretName.Namespace)
-	secret.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
+	if changed {
+		secret := &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"type": "Opaque",
+				"data": data,
+			},
+		}
+		secret.SetName(secretName.Name)
+		secret.SetNamespace(secretName.Namespace)
+		secret.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
 
-	err = controllerutil.SetControllerReference(ctx.Object, secret, ctx.Scheme)
-	if err != nil {
-		return core.Result{}, errors.Wrap(err, "error setting owner reference")
-	}
+		err = controllerutil.SetControllerReference(ctx.Object, secret, ctx.Scheme)
+		if err != nil {
+			return core.Result{}, errors.Wrap(err, "error setting owner reference")
+		}
 
-	// Sigh *bool.
-	force := true
-	err = ctx.Client.Patch(ctx, secret, client.Apply, &client.PatchOptions{Force: &force, FieldManager: ctx.FieldManager})
-	if err != nil {
-		return core.Result{}, errors.Wrapf(err, "error applying secret %s", secretName)
+		// Sigh *bool.
+		force := true
+		err = ctx.Client.Patch(ctx, secret, client.Apply, &client.PatchOptions{Force: &force, FieldManager: ctx.FieldManager})
+		if err != nil {
+			return core.Result{}, errors.Wrapf(err, "error applying secret %s", secretName)
+		}
 	}
 
 	return core.Result{}, nil
