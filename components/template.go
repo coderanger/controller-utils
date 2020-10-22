@@ -17,6 +17,9 @@ limitations under the License.
 package components
 
 import (
+	"fmt"
+	"reflect"
+
 	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,9 +28,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/coderanger/controller-utils/core"
 	"github.com/coderanger/controller-utils/templates"
@@ -35,6 +41,7 @@ import (
 
 const DELETE_ANNOTATION = "controller-utils/delete"
 const CONDITION_ANNOTATION = "controller-utils/condition"
+const DEEPEQUALS_ANNOTATION = "controller-utils/deepEquals"
 
 type templateComponent struct {
 	template      string
@@ -60,7 +67,14 @@ func (comp *templateComponent) Setup(ctx *core.Context, bldr *ctrl.Builder) erro
 	if err != nil {
 		return errors.Wrap(err, "error rendering setup template")
 	}
-	bldr.Owns(obj)
+	// Check if we should use the slower DeepEquals predicate.
+	annotations := obj.GetAnnotations()
+	deepEquals, ok := annotations[DEEPEQUALS_ANNOTATION]
+	if ok && deepEquals == "true" {
+		bldr.Owns(obj, builder.WithPredicates(&deepEqualsCheck{}))
+	} else {
+		bldr.Owns(obj)
+	}
 	return nil
 }
 
@@ -84,6 +98,13 @@ func (comp *templateComponent) Reconcile(ctx *core.Context) (core.Result, error)
 		obj.SetAnnotations(annotations)
 	}
 
+	// Hide the DeepEquals annotation.
+	_, ok = annotations[DEEPEQUALS_ANNOTATION]
+	if ok {
+		delete(annotations, DEEPEQUALS_ANNOTATION)
+		obj.SetAnnotations(annotations)
+	}
+
 	if ok && shouldDelete == "true" {
 		return comp.reconcileDelete(ctx, obj)
 	} else {
@@ -103,7 +124,7 @@ func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Objec
 	}
 
 	// Apply the object data.
-	force := true // Sigh *bool.
+	force := false // Sigh *bool.
 	err = ctx.Client.Patch(ctx, obj, client.Apply, &client.PatchOptions{Force: &force, FieldManager: ctx.FieldManager})
 	if err != nil {
 		return core.Result{}, errors.Wrap(err, "error applying object")
@@ -223,6 +244,47 @@ func (comp *templateComponent) referSameObject(ownerRef *metav1.OwnerReference, 
 	}
 
 	return ownerGV.Group == objGVK.Group && ownerRef.Kind == objGVK.Kind && ownerRef.Name == obj.GetName()
+}
+
+// Predicate that uses DeepEquals to work around https://github.com/kubernetes/kubernetes/issues/95460.
+type deepEqualsCheck struct{}
+
+var _ predicate.Predicate = &deepEqualsCheck{}
+
+// Create returns true if the Create event should be processed
+func (_ *deepEqualsCheck) Create(_ event.CreateEvent) bool {
+	return true
+}
+
+// Delete returns true if the Delete event should be processed
+func (_ *deepEqualsCheck) Delete(_ event.DeleteEvent) bool {
+	return true
+}
+
+// Update returns true if the Update event should be processed
+func (_ *deepEqualsCheck) Update(evt event.UpdateEvent) bool {
+	cleanOld := evt.ObjectOld.DeepCopyObject().(metav1.Object)
+	cleanNew := evt.ObjectNew.DeepCopyObject().(metav1.Object)
+	cleanOld.SetGeneration(0)
+	cleanNew.SetGeneration(0)
+	cleanOld.SetResourceVersion("")
+	cleanNew.SetResourceVersion("")
+	cleanOld.SetManagedFields([]metav1.ManagedFieldsEntry{})
+	cleanNew.SetManagedFields([]metav1.ManagedFieldsEntry{})
+
+	// Some debugging nonsense.
+	if false {
+		p := client.MergeFrom(cleanOld.(runtime.Object))
+		d, err := p.Data(cleanNew.(runtime.Object))
+		fmt.Printf("!!!!! %s %v %v\n", d, err, reflect.DeepEqual(cleanNew, cleanOld))
+	}
+
+	return !reflect.DeepEqual(cleanNew, cleanOld)
+}
+
+// Generic returns true if the Generic event should be processed
+func (_ *deepEqualsCheck) Generic(_ event.GenericEvent) bool {
+	return true
 }
 
 func init() {
