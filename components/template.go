@@ -17,7 +17,6 @@ limitations under the License.
 package components
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/pkg/errors"
@@ -271,14 +270,6 @@ func (_ *deepEqualsCheck) Update(evt event.UpdateEvent) bool {
 	cleanNew.SetResourceVersion("")
 	cleanOld.SetManagedFields([]metav1.ManagedFieldsEntry{})
 	cleanNew.SetManagedFields([]metav1.ManagedFieldsEntry{})
-
-	// Some debugging nonsense.
-	if false {
-		p := client.MergeFrom(cleanOld.(runtime.Object))
-		d, err := p.Data(cleanNew.(runtime.Object))
-		fmt.Printf("!!!!! %s %v %v\n", d, err, reflect.DeepEqual(cleanNew, cleanOld))
-	}
-
 	return !reflect.DeepEqual(cleanNew, cleanOld)
 }
 
