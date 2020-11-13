@@ -95,6 +95,8 @@ func (comp *templateComponent) Reconcile(ctx *core.Context) (core.Result, error)
 	if ok {
 		delete(annotations, DELETE_ANNOTATION)
 		obj.SetAnnotations(annotations)
+	} else {
+		shouldDelete = "false"
 	}
 
 	// Hide the DeepEquals annotation.
@@ -104,7 +106,7 @@ func (comp *templateComponent) Reconcile(ctx *core.Context) (core.Result, error)
 		obj.SetAnnotations(annotations)
 	}
 
-	if ok && shouldDelete == "true" {
+	if shouldDelete == "true" {
 		return comp.reconcileDelete(ctx, obj)
 	} else {
 		return comp.reconcileCreate(ctx, obj)
@@ -123,7 +125,7 @@ func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Objec
 	}
 
 	// Apply the object data.
-	force := false // Sigh *bool.
+	force := true // Sigh *bool.
 	err = ctx.Client.Patch(ctx, obj, client.Apply, &client.PatchOptions{Force: &force, FieldManager: ctx.FieldManager})
 	if err != nil {
 		return core.Result{}, errors.Wrap(err, "error applying object")
@@ -158,6 +160,13 @@ func (comp *templateComponent) reconcileDelete(ctx *core.Context, obj core.Objec
 	currentObj.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
 	err := ctx.Client.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, currentObj)
 	if err != nil {
+		if kerrors.IsNotFound(err) {
+			// Didn't exist at all so we're good.
+			if comp.conditionType != "" {
+				ctx.Conditions.SetfTrue(comp.conditionType, "UpstreamDoesNotExist", "Upstream %s %s does not exist", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName())
+			}
+			return core.Result{}, nil
+		}
 		return core.Result{}, errors.Wrapf(err, "error getting current object %s/%s for owner", obj.GetNamespace(), obj.GetName())
 	}
 	controllerRef := metav1.GetControllerOf(currentObj)

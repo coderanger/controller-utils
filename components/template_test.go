@@ -308,6 +308,17 @@ var _ = Describe("Template component", func() {
 		Expect(deployment.Spec.Template.Spec.Containers[0].Image).To(Equal("something"))
 	})
 
+	It("does not delete an already deleted object", func() {
+		comp := NewTemplateComponent("deployment.yml", "DeploymentAvailable")
+		helper = startTestController(comp)
+		c := helper.TestClient
+
+		obj.Spec.Field = "true"
+		c.Create(obj)
+
+		c.EventuallyGetName("testing", obj, c.EventuallyCondition("DeploymentAvailable", "True"))
+	})
+
 	It("handles template data", func() {
 		dataComp := &injectDataComponent{key: "FOO", value: "bar"}
 		comp := NewTemplateComponent("configmap.yml", "")
