@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -111,15 +112,17 @@ func (ush *UnitSuiteHelper) Setup(comp core.Component, obj core.Object) *UnitHel
 	uh.Events = events.Events
 
 	ctx := &core.Context{
-		Context:      context.Background(),
-		Object:       uh.Object,
-		Client:       uh.Client,
-		Templates:    ush.templates,
-		FieldManager: "unit-tests",
-		Scheme:       ush.scheme,
-		Data:         core.ContextData{},
-		Events:       events,
-		Conditions:   core.NewConditionsHelper(uh.Object),
+		Context:        context.Background(),
+		Object:         uh.Object,
+		Client:         uh.Client,
+		UncachedClient: uh.Client,
+		Templates:      ush.templates,
+		FieldManager:   "unit-tests",
+		Scheme:         ush.scheme,
+		Data:           core.ContextData{},
+		Events:         events,
+		Conditions:     core.NewConditionsHelper(uh.Object),
+		Log:            ctrl.Log.WithName("component"),
 	}
 	uh.Ctx = ctx
 
