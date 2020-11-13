@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/onsi/gomega"
-	"github.com/pkg/errors"
 
 	"github.com/coderanger/controller-utils/conditions"
 	"github.com/coderanger/controller-utils/core"
@@ -58,7 +57,7 @@ func (matcher *haveConditionMatcher) Match(actual interface{}) (bool, error) {
 
 	cond := conditions.FindStatusCondition(*conds, matcher.conditionType)
 	if cond == nil {
-		return false, errors.Errorf("Condition type %s not present", matcher.conditionType)
+		return false, nil
 	}
 
 	if matcher.status != nil {
