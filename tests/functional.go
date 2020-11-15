@@ -52,11 +52,13 @@ type functionalBuilder struct {
 	crds         []runtime.Object
 	webhookPaths []string
 	apis         []schemeAdder
+	externalName *string
 }
 
 type FunctionalSuiteHelper struct {
 	environment *envtest.Environment
 	cfg         *rest.Config
+	external    bool
 }
 
 type FunctionalHelper struct {
@@ -66,6 +68,7 @@ type FunctionalHelper struct {
 	Client         client.Client
 	TestClient     *testClient
 	Namespace      string
+	namespaceObj   *corev1.Namespace
 }
 
 func Functional() *functionalBuilder {
@@ -92,6 +95,11 @@ func (b *functionalBuilder) API(adder schemeAdder) *functionalBuilder {
 	return b
 }
 
+func (b *functionalBuilder) UseExistingCluster(externalName string) *functionalBuilder {
+	b.externalName = &externalName
+	return b
+}
+
 func (b *functionalBuilder) Build() (*FunctionalSuiteHelper, error) {
 	helper := &FunctionalSuiteHelper{}
 	// Set up default paths for standard kubebuilder usage.
@@ -112,6 +120,13 @@ func (b *functionalBuilder) Build() (*FunctionalSuiteHelper, error) {
 			DirectoryPaths:           b.webhookPaths,
 			IgnoreErrorIfPathMissing: defaultWebhookPaths,
 		},
+	}
+	if b.externalName != nil {
+		boolp := true
+		helper.environment.UseExistingCluster = &boolp
+		helper.environment.WebhookInstallOptions.LocalServingHost = "0.0.0.0"
+		helper.environment.WebhookInstallOptions.LocalServingHostExternalName = *b.externalName
+		helper.external = true
 	}
 
 	// Initialze the RNG.
@@ -208,6 +223,9 @@ func (fsh *FunctionalSuiteHelper) Start(controllers ...managerAdder) (*Functiona
 	if err != nil {
 		return nil, errors.Wrapf(err, "error creating test namespace %s", fh.Namespace)
 	}
+	if fsh.external {
+		fh.namespaceObj = namespace
+	}
 
 	// Create a namespace-bound test client.
 	fh.TestClient = &testClient{client: fh.Client, namespace: fh.Namespace}
@@ -222,6 +240,13 @@ func (fsh *FunctionalSuiteHelper) MustStart(controllers ...managerAdder) *Functi
 }
 
 func (fh *FunctionalHelper) Stop() error {
+	// Clean up the namespace if using an extneral control plane.
+	if fh.namespaceObj != nil {
+		err := fh.UncachedClient.Delete(context.Background(), fh.namespaceObj)
+		if err != nil {
+			return err
+		}
+	}
 	if fh != nil && fh.managerStop != nil {
 		close(fh.managerStop)
 		// TODO maybe replace this with my own timeout so it doesn't use Gomega.
