@@ -250,7 +250,7 @@ func (fh *FunctionalHelper) Stop() error {
 	if fh != nil && fh.managerStop != nil {
 		close(fh.managerStop)
 		// TODO maybe replace this with my own timeout so it doesn't use Gomega.
-		gomega.Eventually(fh.managerDone).Should(gomega.BeClosed())
+		gomega.Eventually(fh.managerDone, 30*time.Second).Should(gomega.BeClosed())
 	}
 	// TODO This is not needed in controller-runtime 0.6 or above, revisit.
 	metrics.Registry = prometheus.NewRegistry()
