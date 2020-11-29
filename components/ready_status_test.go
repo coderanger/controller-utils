@@ -18,6 +18,7 @@ package components
 
 import (
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -46,6 +47,9 @@ var _ = Describe("ReadyStatus component", func() {
 	})
 
 	AfterEach(func() {
+		if CurrentGinkgoTestDescription().Failed {
+			helper.DebugList(&TestObjectList{})
+		}
 		if helper != nil {
 			helper.MustStop()
 		}
@@ -100,12 +104,14 @@ var _ = Describe("ReadyStatus component", func() {
 
 		c.EventuallyGetName(obj.Name, obj, c.EventuallyCondition("Ready", "True"))
 
-		// Set them back to False.
+		// Set one back to False.
 		objClean = obj.DeepCopy()
 		setCondition("Two", metav1.ConditionFalse)
 		c.Status().Patch(obj, client.MergeFrom(objClean))
 
 		c.EventuallyGetName(obj.Name, obj, c.EventuallyCondition("Ready", "False"))
+		cond := conditions.FindStatusCondition(obj.Status.Conditions, "Ready")
+		Expect(cond.Message).To(Equal("ReadyStatusComponent did not observe correct status of Two"))
 	})
 
 	It("handles negative polarity", func() {

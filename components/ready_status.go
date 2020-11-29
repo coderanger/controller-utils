@@ -57,19 +57,27 @@ func (comp *readyStatusComponent) Reconcile(ctx *core.Context) (core.Result, err
 	if err != nil {
 		return core.Result{}, errors.Wrap(err, "error getting object conditions")
 	}
-	status := metav1.ConditionTrue
-	reason := "CompositeReady"
-	message := "observed"
+	failedKeys := []string{}
 	for conditionType, desiredStatus := range comp.readyConditions {
 		if !conditions.IsStatusConditionPresentAndEqual(*objConditions, conditionType, desiredStatus) {
-			status = metav1.ConditionFalse
-			reason = "CompositeNotRead"
-			message = "did not observe"
-			break
+			failedKeys = append(failedKeys, conditionType)
 		}
 	}
+	var status metav1.ConditionStatus
+	var reason, message, messageKeys string
+	if len(failedKeys) == 0 {
+		status = metav1.ConditionTrue
+		reason = "CompositeReady"
+		message = "observed"
+		messageKeys = strings.Join(comp.keys, ", ")
+	} else {
+		status = metav1.ConditionFalse
+		reason = "CompositeNotReady"
+		message = "did not observe"
+		messageKeys = strings.Join(failedKeys, ", ")
+	}
 	// TODO The condition type should be configurable somehow.
-	ctx.Conditions.Setf("Ready", status, reason, "ReadyStatusComponent %s correct status of %s", message, strings.Join(comp.keys, ", "))
+	ctx.Conditions.Setf("Ready", status, reason, "ReadyStatusComponent %s correct status of %s", message, messageKeys)
 	return core.Result{}, nil
 }
 
