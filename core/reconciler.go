@@ -87,9 +87,9 @@ func NewReconciler(mgr ctrl.Manager) *Reconciler {
 	}
 }
 
-func (r *Reconciler) For(apiType runtime.Object) *Reconciler {
+func (r *Reconciler) For(apiType runtime.Object, opts ...builder.ForOption) *Reconciler {
 	r.apiType = apiType
-	r.controllerBuilder = r.controllerBuilder.For(apiType)
+	r.controllerBuilder = r.controllerBuilder.For(apiType, opts...)
 	return r
 }
 
