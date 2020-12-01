@@ -17,8 +17,6 @@ limitations under the License.
 package components
 
 import (
-	"reflect"
-
 	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,10 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/coderanger/controller-utils/core"
+	"github.com/coderanger/controller-utils/predicates"
 	"github.com/coderanger/controller-utils/templates"
 )
 
@@ -70,7 +67,7 @@ func (comp *templateComponent) Setup(ctx *core.Context, bldr *ctrl.Builder) erro
 	annotations := obj.GetAnnotations()
 	deepEquals, ok := annotations[DEEPEQUALS_ANNOTATION]
 	if ok && deepEquals == "true" {
-		bldr.Owns(obj, builder.WithPredicates(&deepEqualsCheck{}))
+		bldr.Owns(obj, builder.WithPredicates(predicates.DeepEquals()))
 	} else {
 		bldr.Owns(obj)
 	}
@@ -252,39 +249,6 @@ func (comp *templateComponent) referSameObject(ownerRef *metav1.OwnerReference, 
 	}
 
 	return ownerGV.Group == objGVK.Group && ownerRef.Kind == objGVK.Kind && ownerRef.Name == obj.GetName()
-}
-
-// Predicate that uses DeepEquals to work around https://github.com/kubernetes/kubernetes/issues/95460.
-type deepEqualsCheck struct{}
-
-var _ predicate.Predicate = &deepEqualsCheck{}
-
-// Create returns true if the Create event should be processed
-func (_ *deepEqualsCheck) Create(_ event.CreateEvent) bool {
-	return true
-}
-
-// Delete returns true if the Delete event should be processed
-func (_ *deepEqualsCheck) Delete(_ event.DeleteEvent) bool {
-	return true
-}
-
-// Update returns true if the Update event should be processed
-func (_ *deepEqualsCheck) Update(evt event.UpdateEvent) bool {
-	cleanOld := evt.ObjectOld.DeepCopyObject().(metav1.Object)
-	cleanNew := evt.ObjectNew.DeepCopyObject().(metav1.Object)
-	cleanOld.SetGeneration(0)
-	cleanNew.SetGeneration(0)
-	cleanOld.SetResourceVersion("")
-	cleanNew.SetResourceVersion("")
-	cleanOld.SetManagedFields([]metav1.ManagedFieldsEntry{})
-	cleanNew.SetManagedFields([]metav1.ManagedFieldsEntry{})
-	return !reflect.DeepEqual(cleanNew, cleanOld)
-}
-
-// Generic returns true if the Generic event should be processed
-func (_ *deepEqualsCheck) Generic(_ event.GenericEvent) bool {
-	return true
 }
 
 func init() {
