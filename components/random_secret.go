@@ -28,10 +28,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/coderanger/controller-utils/core"
+	"github.com/coderanger/controller-utils/predicates"
 	"github.com/coderanger/controller-utils/randstring"
 )
 
@@ -54,7 +56,7 @@ func NewRandomSecretComponent(name string, keys ...string) core.Component {
 }
 
 func (comp *randomSecretComponent) Setup(_ *core.Context, bldr *ctrl.Builder) error {
-	bldr.Owns(&corev1.Secret{})
+	bldr.Owns(&corev1.Secret{}, builder.WithPredicates(predicates.SecretField(comp.keys)))
 	return nil
 }
 

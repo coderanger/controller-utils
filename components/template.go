@@ -17,6 +17,8 @@ limitations under the License.
 package components
 
 import (
+	"strings"
+
 	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,6 +40,7 @@ import (
 const DELETE_ANNOTATION = "controller-utils/delete"
 const CONDITION_ANNOTATION = "controller-utils/condition"
 const DEEPEQUALS_ANNOTATION = "controller-utils/deepEquals"
+const SECRETFIELD_ANNOTATION = "controller-utils/secretField"
 
 type templateComponent struct {
 	template      string
@@ -66,8 +69,11 @@ func (comp *templateComponent) Setup(ctx *core.Context, bldr *ctrl.Builder) erro
 	// Check if we should use the slower DeepEquals predicate.
 	annotations := obj.GetAnnotations()
 	deepEquals, ok := annotations[DEEPEQUALS_ANNOTATION]
+	secretField, ok2 := annotations[SECRETFIELD_ANNOTATION]
 	if ok && deepEquals == "true" {
 		bldr.Owns(obj, builder.WithPredicates(predicates.DeepEquals()))
+	} else if ok2 && secretField != "" {
+		bldr.Owns(obj, builder.WithPredicates(predicates.SecretField(strings.Split(secretField, ","))))
 	} else {
 		bldr.Owns(obj)
 	}
