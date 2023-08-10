@@ -32,8 +32,7 @@ import (
 	"gopkg.in/yaml.v2"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes/scheme"
-
-	"github.com/coderanger/controller-utils/core"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func parseTemplate(fs http.FileSystem, filename string) (*template.Template, error) {
@@ -98,12 +97,12 @@ func renderTemplate(tmpl *template.Template, data interface{}) ([]byte, error) {
 
 // Parse the rendered data into an object. The caller has to cast it from a
 // core.Object into the correct type.
-func parseObject(rawObject []byte) (core.Object, error) {
+func parseObject(rawObject []byte) (client.Object, error) {
 	obj, _, err := scheme.Codecs.UniversalDeserializer().Decode(rawObject, nil, nil)
 	if err != nil {
 		return nil, err
 	}
-	coreObj, ok := obj.(core.Object)
+	coreObj, ok := obj.(client.Object)
 	if !ok {
 		return nil, errors.New("unable to cast to core.Object")
 	}
@@ -142,7 +141,7 @@ func castValue(v interface{}) interface{} {
 }
 
 // Parse the rendered data into an Unstructured.
-func parseUnstructured(rawObject []byte) (core.Object, error) {
+func parseUnstructured(rawObject []byte) (client.Object, error) {
 	data := map[interface{}]interface{}{}
 	err := yaml.Unmarshal(rawObject, data)
 	if err != nil {
@@ -151,7 +150,7 @@ func parseUnstructured(rawObject []byte) (core.Object, error) {
 	return &unstructured.Unstructured{Object: castMap(data)}, nil
 }
 
-func Get(fs http.FileSystem, filename string, unstructured bool, data interface{}) (core.Object, error) {
+func Get(fs http.FileSystem, filename string, unstructured bool, data interface{}) (client.Object, error) {
 	tmpl, err := parseTemplate(fs, filename)
 	if err != nil {
 		return nil, err
@@ -160,7 +159,7 @@ func Get(fs http.FileSystem, filename string, unstructured bool, data interface{
 	if err != nil {
 		return nil, err
 	}
-	var obj core.Object
+	var obj client.Object
 	if unstructured {
 		obj, err = parseUnstructured(out)
 	} else {

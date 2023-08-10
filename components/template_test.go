@@ -26,7 +26,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -115,7 +114,7 @@ var _ = Describe("Template component", func() {
 		c.Create(obj)
 
 		deployment := &appsv1.Deployment{}
-		c.EventuallyGetName("testing-webserver", deployment, c.EventuallyValue(PointTo(BeEquivalentTo(0)), func(obj runtime.Object) (interface{}, error) {
+		c.EventuallyGetName("testing-webserver", deployment, c.EventuallyValue(PointTo(BeEquivalentTo(0)), func(obj client.Object) (interface{}, error) {
 			return obj.(*appsv1.Deployment).Spec.Replicas, nil
 		}))
 		Expect(deployment.Spec.Replicas).To(PointTo(BeEquivalentTo(0)))

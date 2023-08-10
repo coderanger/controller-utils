@@ -48,7 +48,7 @@ type UnitHelper struct {
 	Comp       core.Component
 	Client     client.Client
 	TestClient *testClient
-	Object     core.Object
+	Object     client.Object
 	Events     chan string
 	Ctx        *core.Context
 }
@@ -93,7 +93,7 @@ func (b *unitBuilder) MustBuild() *UnitSuiteHelper {
 	return ush
 }
 
-func (ush *UnitSuiteHelper) Setup(comp core.Component, obj core.Object) *UnitHelper {
+func (ush *UnitSuiteHelper) Setup(comp core.Component, obj client.Object) *UnitHelper {
 	uh := &UnitHelper{Comp: comp}
 
 	metaObj := obj.(metav1.Object)

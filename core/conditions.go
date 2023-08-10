@@ -25,13 +25,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/coderanger/controller-utils/conditions"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type ConditionsObject interface {
 	GetConditions() *[]conditions.Condition
 }
 
-func GetConditionsFor(obj Object) (*[]conditions.Condition, error) {
+func GetConditionsFor(obj client.Object) (*[]conditions.Condition, error) {
 	// Try the simple and correct way.
 	condObj, ok := obj.(ConditionsObject)
 	if ok {
@@ -56,11 +57,11 @@ func GetConditionsFor(obj Object) (*[]conditions.Condition, error) {
 }
 
 type conditionsHelper struct {
-	obj               Object
+	obj               client.Object
 	pendingConditions map[string]*conditions.Condition
 }
 
-func NewConditionsHelper(obj Object) *conditionsHelper {
+func NewConditionsHelper(obj client.Object) *conditionsHelper {
 	return &conditionsHelper{
 		obj:               obj,
 		pendingConditions: map[string]*conditions.Condition{},
