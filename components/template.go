@@ -48,7 +48,7 @@ type templateComponent struct {
 }
 
 type templateData struct {
-	Object core.Object
+	Object client.Object
 	Data   map[string]interface{}
 }
 
@@ -116,11 +116,11 @@ func (comp *templateComponent) Reconcile(ctx *core.Context) (core.Result, error)
 	}
 }
 
-func (comp *templateComponent) renderTemplate(ctx *core.Context, unstructured bool) (core.Object, error) {
+func (comp *templateComponent) renderTemplate(ctx *core.Context, unstructured bool) (client.Object, error) {
 	return templates.Get(ctx.Templates, comp.template, unstructured, templateData{Object: ctx.Object, Data: ctx.Data})
 }
 
-func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Object) (core.Result, error) {
+func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj client.Object) (core.Result, error) {
 	// Set owner reference.
 	err := controllerutil.SetControllerReference(ctx.Object, obj, ctx.Scheme)
 	if err != nil {
@@ -158,7 +158,7 @@ func (comp *templateComponent) reconcileCreate(ctx *core.Context, obj core.Objec
 	return core.Result{}, nil
 }
 
-func (comp *templateComponent) reconcileDelete(ctx *core.Context, obj core.Object) (core.Result, error) {
+func (comp *templateComponent) reconcileDelete(ctx *core.Context, obj client.Object) (core.Result, error) {
 	currentObj := &unstructured.Unstructured{}
 	currentObj.SetGroupVersionKind(obj.GetObjectKind().GroupVersionKind())
 	err := ctx.Client.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, currentObj)
@@ -192,7 +192,7 @@ func (comp *templateComponent) reconcileDelete(ctx *core.Context, obj core.Objec
 	return core.Result{}, nil
 }
 
-func (comp *templateComponent) getStatusFromUnstructured(obj runtime.Object, srcType string) (metav1.ConditionStatus, bool) {
+func (comp *templateComponent) getStatusFromUnstructured(obj client.Object, srcType string) (metav1.ConditionStatus, bool) {
 	data := obj.(*unstructured.Unstructured).UnstructuredContent()
 
 	// Ooof this is ugly. Once I am set up with Expr or CEL or even a JSONPath library, try and use that instead.
@@ -243,7 +243,7 @@ func (comp *templateComponent) getStatusFromUnstructured(obj runtime.Object, src
 
 // Adapted from controller-runtime.
 // Copyright 2018 The Kubernetes Authors.
-func (comp *templateComponent) referSameObject(ownerRef *metav1.OwnerReference, obj core.Object, scheme *runtime.Scheme) bool {
+func (comp *templateComponent) referSameObject(ownerRef *metav1.OwnerReference, obj client.Object, scheme *runtime.Scheme) bool {
 	ownerGV, err := schema.ParseGroupVersion(ownerRef.APIVersion)
 	if err != nil {
 		return false

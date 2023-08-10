@@ -26,8 +26,6 @@ type Component = core.Component
 
 type Context = core.Context
 
-type Object = core.Object
-
 type Reconciler = core.Reconciler
 
 type Result = core.Result

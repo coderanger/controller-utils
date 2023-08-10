@@ -26,7 +26,6 @@ import (
 	"github.com/pkg/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -50,7 +49,7 @@ type Reconciler struct {
 	mgr               ctrl.Manager
 	controllerBuilder *ctrl.Builder
 	controller        controller.Controller
-	apiType           runtime.Object
+	apiType           client.Object
 	components        []*reconcilerComponent
 	log               logr.Logger
 	client            client.Client
@@ -87,7 +86,7 @@ func NewReconciler(mgr ctrl.Manager) *Reconciler {
 	}
 }
 
-func (r *Reconciler) For(apiType runtime.Object, opts ...builder.ForOption) *Reconciler {
+func (r *Reconciler) For(apiType client.Object, opts ...builder.ForOption) *Reconciler {
 	r.apiType = apiType
 	r.controllerBuilder = r.controllerBuilder.For(apiType, opts...)
 	return r
@@ -191,7 +190,7 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 		UncachedClient: r.uncachedClient,
 		Templates:      r.templates,
 		Scheme:         r.mgr.GetScheme(),
-		Object:         r.apiType.DeepCopyObject().(Object),
+		Object:         r.apiType.DeepCopyObject().(client.Object),
 	}
 	// Provide some bare minimum data
 	setupObj := setupCtx.Object.(metav1.Object)
@@ -227,12 +226,12 @@ func (r *Reconciler) Build() (controller.Controller, error) {
 	return controller, nil
 }
 
-func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.log.WithValues("object", req)
 	log.Info("Starting reconcile")
 
-	ctx := &Context{
-		Context:        context.Background(),
+	recCtx := &Context{
+		Context:        ctx,
 		Client:         r.client,
 		UncachedClient: r.uncachedClient,
 		Templates:      r.templates,
@@ -241,8 +240,8 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		Data:           ContextData{},
 	}
 
-	obj := r.apiType.DeepCopyObject()
-	err := r.client.Get(ctx, req.NamespacedName, obj)
+	obj := r.apiType.DeepCopyObject().(client.Object)
+	err := r.client.Get(recCtx, req.NamespacedName, obj)
 	if err != nil {
 		if kerrors.IsNotFound(err) {
 			// Object not found, likely already deleted, just silenty bail.
@@ -251,12 +250,13 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		}
 		return reconcile.Result{Requeue: true}, errors.Wrap(err, "error getting reconcile object")
 	}
-	ctx.Object = obj.(Object)
-	ctx.Conditions = NewConditionsHelper(ctx.Object)
-	cleanObj := obj.DeepCopyObject().(Object)
+	recCtx.Object = obj.(client.Object)
+
+	recCtx.Conditions = NewConditionsHelper(recCtx.Object)
+	cleanObj := obj.DeepCopyObject().(client.Object)
 
 	// Check for annotation that blocks reconciles, exit early if found.
-	annotations := ctx.Object.GetAnnotations()
+	annotations := recCtx.Object.GetAnnotations()
 	reconcileBlocked, ok := annotations["controller-utils/skip-reconcile"]
 	if ok && reconcileBlocked == "true" {
 		log.Info("Skipping reconcile due to annotation")
@@ -267,32 +267,32 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	compLog := log.WithName("components")
 	for _, rc := range r.components {
 		// Create the per-component logger.
-		ctx.Log = compLog.WithName(rc.name)
-		ctx.FieldManager = fmt.Sprintf("%s/%s", r.name, rc.name)
-		isAlive := ctx.Object.GetDeletionTimestamp() == nil
+		recCtx.Log = compLog.WithName(rc.name)
+		recCtx.FieldManager = fmt.Sprintf("%s/%s", r.name, rc.name)
+		isAlive := recCtx.Object.GetDeletionTimestamp() == nil
 		if rc.readyCondition != "" {
-			ctx.Conditions.SetUnknown(rc.readyCondition, "Unknown")
+			recCtx.Conditions.SetUnknown(rc.readyCondition, "Unknown")
 		}
 		var res Result
 		if isAlive {
 			log.V(1).Info("Reconciling component", "component", rc.name)
-			res, err = rc.comp.Reconcile(ctx)
+			res, err = rc.comp.Reconcile(recCtx)
 			if rc.finalizer != nil {
-				controllerutil.AddFinalizer(ctx.Object, rc.finalizerName)
+				controllerutil.AddFinalizer(recCtx.Object, rc.finalizerName)
 			}
-		} else if rc.finalizer != nil && controllerutil.ContainsFinalizer(ctx.Object, rc.finalizerName) {
+		} else if rc.finalizer != nil && controllerutil.ContainsFinalizer(recCtx.Object, rc.finalizerName) {
 			log.V(1).Info("Finalizing component", "component", rc.name)
 			var done bool
-			res, done, err = rc.finalizer.Finalize(ctx)
+			res, done, err = rc.finalizer.Finalize(recCtx)
 			if done {
-				controllerutil.RemoveFinalizer(ctx.Object, rc.finalizerName)
+				controllerutil.RemoveFinalizer(recCtx.Object, rc.finalizerName)
 			}
 		}
 		if err != nil && rc.readyCondition != "" {
 			// Mark the status condition for this component as bad.
-			ctx.Conditions.Set(rc.readyCondition, rc.errorConditionStatus, "Error", err.Error())
+			recCtx.Conditions.Set(rc.readyCondition, rc.errorConditionStatus, "Error", err.Error())
 		}
-		ctx.mergeResult(rc.name, res, err)
+		recCtx.mergeResult(rc.name, res, err)
 		if err != nil {
 			log.Error(err, "error in component reconcile", "component", rc.name)
 		}
@@ -304,39 +304,40 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	// Check if we need to patch metadata, only looking at labels, annotations, and finalizers.
-	currentMeta := r.apiType.DeepCopyObject().(Object)
-	currentMeta.SetName(ctx.Object.GetName())
-	currentMeta.SetNamespace(ctx.Object.GetNamespace())
-	currentMeta.SetLabels(ctx.Object.GetLabels())
-	currentMeta.SetAnnotations(ctx.Object.GetAnnotations())
-	currentMeta.SetFinalizers(ctx.Object.GetFinalizers())
-	cleanMeta := r.apiType.DeepCopyObject().(Object)
+	currentMeta := r.apiType.DeepCopyObject().(client.Object)
+	currentMeta.SetName(recCtx.Object.GetName())
+	currentMeta.SetNamespace(recCtx.Object.GetNamespace())
+	currentMeta.SetLabels(recCtx.Object.GetLabels())
+	currentMeta.SetAnnotations(recCtx.Object.GetAnnotations())
+	currentMeta.SetFinalizers(recCtx.Object.GetFinalizers())
+	cleanMeta := r.apiType.DeepCopyObject().(client.Object)
 	cleanMeta.SetName(cleanObj.GetName())
 	cleanMeta.SetNamespace(cleanObj.GetNamespace())
 	cleanMeta.SetLabels(cleanObj.GetLabels())
 	cleanMeta.SetAnnotations(cleanObj.GetAnnotations())
 	cleanMeta.SetFinalizers(cleanObj.GetFinalizers())
-	err = r.client.Patch(ctx, currentMeta, client.MergeFrom(cleanMeta), &client.PatchOptions{FieldManager: r.name})
+	err = r.client.Patch(recCtx, currentMeta, client.MergeFrom(cleanMeta), &client.PatchOptions{FieldManager: r.name})
 	if err != nil && !kerrors.IsNotFound(err) {
 		// If it was a NotFound error, the object was probably already deleted so just ignore the error and return the existing result.
-		return ctx.result, errors.Wrap(err, "error patching metadata")
+		return recCtx.result, errors.Wrap(err, "error patching metadata")
 	}
 
 	// Save the object status.
-	err = r.client.Status().Patch(ctx, ctx.Object, client.MergeFrom(cleanObj), &client.PatchOptions{FieldManager: r.name})
+	err = r.client.Status().Patch(recCtx, recCtx.Object, client.MergeFrom(cleanObj), &client.PatchOptions{FieldManager: r.name})
+
 	if err != nil && !kerrors.IsNotFound(err) {
 		// If it was a NotFound error, the object was probably already deleted so just ignore the error and return the existing result.
-		return ctx.result, errors.Wrap(err, "error patching status")
+		return recCtx.result, errors.Wrap(err, "error patching status")
 	}
 
 	// Build up the final error to be logged.
 	err = nil
-	if len(ctx.errors) == 1 {
-		err = ctx.errors[0]
-	} else if len(ctx.errors) > 1 {
+	if len(recCtx.errors) == 1 {
+		err = recCtx.errors[0]
+	} else if len(recCtx.errors) > 1 {
 		msg := strings.Builder{}
 		msg.WriteString("Multiple errors:\n")
-		for _, e := range ctx.errors {
+		for _, e := range recCtx.errors {
 			msg.WriteString("  ")
 			msg.WriteString(e.Error())
 			msg.WriteString("\n")
@@ -344,5 +345,5 @@ func (r *Reconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 		err = errors.New(msg.String())
 	}
 
-	return ctx.result, err
+	return recCtx.result, err
 }

@@ -23,6 +23,7 @@ import (
 
 	"github.com/coderanger/controller-utils/conditions"
 	"github.com/coderanger/controller-utils/core"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type haveConditionMatcher struct {
@@ -46,9 +47,9 @@ func (matcher *haveConditionMatcher) WithReason(reason string) *haveConditionMat
 }
 
 func (matcher *haveConditionMatcher) Match(actual interface{}) (bool, error) {
-	obj, ok := actual.(core.Object)
+	obj, ok := actual.(client.Object)
 	if !ok {
-		return false, fmt.Errorf("HaveCondition matcher expects a runtime.Object")
+		return false, fmt.Errorf("HaveCondition matcher expects a client.Object")
 	}
 	conds, err := core.GetConditionsFor(obj)
 	if err != nil {
@@ -99,7 +100,7 @@ func (matcher *haveConditionMatcher) message(actual interface{}, polarity bool) 
 		joiner = "not "
 	}
 
-	obj, ok := actual.(core.Object)
+	obj, ok := actual.(client.Object)
 	if ok {
 		conds, err := core.GetConditionsFor(obj)
 		if err == nil {

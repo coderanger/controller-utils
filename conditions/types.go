@@ -20,17 +20,18 @@ import (
 // Condition contains details for one aspect of the current state of this API Resource.
 // ---
 // This struct is intended for direct use as an array at the field path .status.conditions.  For example,
-// type FooStatus struct{
-//     // Represents the observations of a foo's current state.
-//     // Known .status.conditions.type are: "Available", "Progressing", and "Degraded"
-//     // +patchMergeKey=type
-//     // +patchStrategy=merge
-//     // +listType=map
-//     // +listMapKey=type
-//     Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 //
-//     // other fields
-// }
+//	type FooStatus struct{
+//	    // Represents the observations of a foo's current state.
+//	    // Known .status.conditions.type are: "Available", "Progressing", and "Degraded"
+//	    // +patchMergeKey=type
+//	    // +patchStrategy=merge
+//	    // +listType=map
+//	    // +listMapKey=type
+//	    Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+//
+//	    // other fields
+//	}
 type Condition struct {
 	// type of condition in CamelCase or in foo.example.com/CamelCase.
 	// ---

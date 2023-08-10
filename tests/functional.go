@@ -28,7 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
-	apiextv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -49,7 +49,7 @@ type managerAdder func(ctrl.Manager) error
 
 type functionalBuilder struct {
 	crdPaths     []string
-	crds         []runtime.Object
+	crds         []*apiextv1.CustomResourceDefinition
 	webhookPaths []string
 	apis         []schemeAdder
 	externalName *string
@@ -62,7 +62,7 @@ type FunctionalSuiteHelper struct {
 }
 
 type FunctionalHelper struct {
-	managerStop    chan struct{}
+	managerCancel  context.CancelFunc
 	managerDone    chan struct{}
 	UncachedClient client.Client
 	Client         client.Client
@@ -80,7 +80,7 @@ func (b *functionalBuilder) CRDPath(path string) *functionalBuilder {
 	return b
 }
 
-func (b *functionalBuilder) CRD(crd *apiextv1beta1.CustomResourceDefinition) *functionalBuilder {
+func (b *functionalBuilder) CRD(crd *apiextv1.CustomResourceDefinition) *functionalBuilder {
 	b.crds = append(b.crds, crd)
 	return b
 }
@@ -117,7 +117,7 @@ func (b *functionalBuilder) Build() (*FunctionalSuiteHelper, error) {
 		CRDDirectoryPaths: b.crdPaths,
 		CRDs:              b.crds,
 		WebhookInstallOptions: envtest.WebhookInstallOptions{
-			DirectoryPaths:           b.webhookPaths,
+			Paths:                    b.webhookPaths,
 			IgnoreErrorIfPathMissing: defaultWebhookPaths,
 		},
 	}
@@ -200,11 +200,12 @@ func (fsh *FunctionalSuiteHelper) Start(controllers ...managerAdder) (*Functiona
 	}
 
 	// Start the manager (in the background).
-	fh.managerStop = make(chan struct{})
+	ctx, cancel := context.WithCancel(context.Background())
+	fh.managerCancel = cancel
 	fh.managerDone = make(chan struct{})
 	go func() {
 		defer close(fh.managerDone)
-		err := mgr.Start(fh.managerStop)
+		err := mgr.Start(ctx)
 		if err != nil {
 			panic(err)
 		}
@@ -247,8 +248,8 @@ func (fh *FunctionalHelper) Stop() error {
 			return err
 		}
 	}
-	if fh != nil && fh.managerStop != nil {
-		close(fh.managerStop)
+	if fh != nil && fh.managerCancel != nil {
+		fh.managerCancel()
 		// TODO maybe replace this with my own timeout so it doesn't use Gomega.
 		gomega.Eventually(fh.managerDone, 30*time.Second).Should(gomega.BeClosed())
 	}

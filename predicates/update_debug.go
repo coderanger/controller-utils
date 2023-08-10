@@ -49,7 +49,7 @@ func (_ *updateDebugPredicate) Delete(_ event.DeleteEvent) bool {
 // Update returns true if the Update event should be processed
 func (_ *updateDebugPredicate) Update(evt event.UpdateEvent) bool {
 	if os.Getenv("DEBUG_UPDATE") == "true" {
-		obj := fmt.Sprintf("%s/%s", evt.MetaNew.GetNamespace(), evt.MetaNew.GetName())
+		obj := fmt.Sprintf("%s/%s", evt.ObjectNew.GetNamespace(), evt.ObjectNew.GetName())
 		diff, err := client.MergeFrom(evt.ObjectOld).Data(evt.ObjectNew)
 		if err != nil {
 			updateDebugLog.Info("error generating diff", "err", err, "obj", obj)

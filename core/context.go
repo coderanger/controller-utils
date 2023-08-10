@@ -32,7 +32,7 @@ type ContextData map[string]interface{}
 
 type Context struct {
 	context.Context
-	Object         Object
+	Object         client.Object
 	Client         client.Client
 	UncachedClient client.Client
 	Log            logr.Logger
