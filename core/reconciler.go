@@ -33,7 +33,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // Supporting mocking out functions for testing
@@ -89,6 +91,11 @@ func NewReconciler(mgr ctrl.Manager) *Reconciler {
 func (r *Reconciler) For(apiType client.Object, opts ...builder.ForOption) *Reconciler {
 	r.apiType = apiType
 	r.controllerBuilder = r.controllerBuilder.For(apiType, opts...)
+	return r
+}
+
+func (r *Reconciler) Watches(src source.Source, eventhandler handler.EventHandler, opts ...builder.WatchesOption) *Reconciler {
+	r.controllerBuilder = r.controllerBuilder.Watches(src, eventhandler, opts...)
 	return r
 }
 
